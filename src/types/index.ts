@@ -91,30 +91,16 @@ export interface HonorariosInput {
 }
 
 // Rescisão
-export type TipoRescisao = 
-  | "SEM_JUSTA_CAUSA" 
-  | "COM_JUSTA_CAUSA" 
-  | "PEDIDO_DEMISSAO" 
-  | "ACORDO_MUTUO";
-
 export interface RescisaoInput {
   salarioBase: number;
-  dataAdmissao: Date;
-  dataDemissao: Date;
-  tipoRescisao: TipoRescisao;
-  saldoFerias: number;
-  decimoTerceiroProporcional: boolean;
-  avisoPrevioTrabalhado: boolean;
-  fgtsDepositado: number;
+  incluirFerias: boolean;
+  incluirDecimoTerceiro: boolean;
+  faltasMes: number;
 }
 
 // Férias
 export interface FeriasInput {
   salarioBase: number;
-  diasFerias: number;
-  abonoPecuniario: boolean;
-  dependentes: number;
-  adicionaisPercent: number;
 }
 
 // Audit

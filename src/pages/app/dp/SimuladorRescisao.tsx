@@ -3,48 +3,44 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { FileText, FileDown, RotateCcw } from "lucide-react";
+import { FileDown, FileText, RotateCcw } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
-import type { TipoRescisao, BreakdownItem } from "@/types";
+import type { BreakdownItem } from "@/types";
 
 interface FormData {
   salarioBase: string;
-  dataAdmissao: string;
-  dataDemissao: string;
-  tipoRescisao: TipoRescisao;
-  saldoFerias: string;
-  decimoTerceiroProporcional: boolean;
-  avisoPrevioTrabalhado: boolean;
-  fgtsDepositado: string;
+  incluirFerias: boolean;
+  incluirDecimoTerceiro: boolean;
+  faltasMes: string;
+}
+
+interface SimulationResult {
+  total: number;
+  breakdown: BreakdownItem[];
+  createdAt: Date;
+  inputs: {
+    salarioBase: number;
+    incluirFerias: boolean;
+    incluirDecimoTerceiro: boolean;
+    faltasMes: number;
+  };
 }
 
 const initialFormData: FormData = {
   salarioBase: "",
-  dataAdmissao: "",
-  dataDemissao: "",
-  tipoRescisao: "SEM_JUSTA_CAUSA",
-  saldoFerias: "0",
-  decimoTerceiroProporcional: true,
-  avisoPrevioTrabalhado: false,
-  fgtsDepositado: "",
-};
-
-const tipoRescisaoLabels: Record<TipoRescisao, string> = {
-  SEM_JUSTA_CAUSA: "Sem Justa Causa",
-  COM_JUSTA_CAUSA: "Com Justa Causa",
-  PEDIDO_DEMISSAO: "Pedido de Demissão",
-  ACORDO_MUTUO: "Acordo Mútuo",
+  incluirFerias: false,
+  incluirDecimoTerceiro: false,
+  faltasMes: "0",
 };
 
 export default function SimuladorRescisao() {
   const [formData, setFormData] = useState<FormData>(initialFormData);
-  const [result, setResult] = useState<{ total: number; breakdown: BreakdownItem[] } | null>(null);
+  const [result, setResult] = useState<SimulationResult | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
 
   const formatCurrency = (value: number): string => {
@@ -58,6 +54,15 @@ export default function SimuladorRescisao() {
     return parseFloat(value.replace(/[^\d,]/g, "").replace(",", ".")) || 0;
   };
 
+  const formatDateTime = (value: Date): string => {
+    return new Intl.DateTimeFormat("pt-BR", {
+      dateStyle: "short",
+      timeStyle: "short",
+    }).format(value);
+  };
+
+  const formatYesNo = (value: boolean): string => (value ? "Sim" : "Não");
+
   const handleCurrencyInput = (field: keyof FormData, value: string) => {
     const numericValue = value.replace(/\D/g, "");
     const formatted = numericValue
@@ -69,111 +74,268 @@ export default function SimuladorRescisao() {
     setFormData((prev) => ({ ...prev, [field]: formatted }));
   };
 
+  const buildReportHtml = (payload: SimulationResult) => {
+    const breakdownRows = payload.breakdown
+      .map(
+        (item) => `
+          <tr>
+            <td>
+              <div class="item-title">${item.label}</div>
+              <div class="item-meta">${item.formulaText}</div>
+            </td>
+            <td class="amount ${item.sign === "-" ? "neg" : ""}">
+              ${item.sign === "-" ? "-" : ""}${formatCurrency(item.amount)}
+            </td>
+          </tr>
+        `
+      )
+      .join("");
+
+    return `<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <title>Relatório de Simulação - Rescisão</title>
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 32px 40px;
+        font-family: "Georgia", "Times New Roman", serif;
+        color: #0f172a;
+        background: #ffffff;
+      }
+      .header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        margin-bottom: 24px;
+        border-bottom: 1px solid #e2e8f0;
+        padding-bottom: 16px;
+      }
+      .eyebrow {
+        font-size: 11px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: #64748b;
+      }
+      h1 {
+        margin: 8px 0 4px;
+        font-size: 20px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+      .meta {
+        font-size: 12px;
+        color: #475569;
+      }
+      .tag {
+        border: 1px solid #0f172a;
+        padding: 6px 12px;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+      }
+      h2 {
+        margin: 20px 0 8px;
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: #1f2937;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .simple th,
+      .simple td {
+        text-align: left;
+        font-size: 13px;
+        padding: 6px 0;
+      }
+      .simple th {
+        color: #475569;
+        font-weight: 600;
+        width: 40%;
+      }
+      .detail th,
+      .detail td {
+        border-top: 1px solid #e2e8f0;
+        padding: 10px 0;
+        font-size: 13px;
+        vertical-align: top;
+      }
+      .detail th {
+        text-align: left;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: #64748b;
+      }
+      .item-title {
+        font-weight: 600;
+        margin-bottom: 4px;
+      }
+      .item-meta {
+        font-size: 12px;
+        color: #64748b;
+      }
+      .amount {
+        text-align: right;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .amount.neg {
+        color: #b91c1c;
+      }
+      .total {
+        margin-top: 20px;
+        border: 1px solid #0f172a;
+        padding: 14px 16px;
+        display: flex;
+        justify-content: space-between;
+        font-size: 16px;
+        font-weight: 600;
+      }
+      .footer {
+        margin-top: 24px;
+        font-size: 11px;
+        color: #64748b;
+        border-top: 1px solid #e2e8f0;
+        padding-top: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <div>
+        <div class="eyebrow">Departamento Pessoal</div>
+        <h1>Relatório de Simulação - Rescisão</h1>
+        <div class="meta">Gerado em ${formatDateTime(payload.createdAt)}</div>
+      </div>
+      <div class="tag">Simulação Simplificada</div>
+    </div>
+
+    <h2>Dados informados</h2>
+    <table class="simple">
+      <tr>
+        <th>Salário base</th>
+        <td>${formatCurrency(payload.inputs.salarioBase)}</td>
+      </tr>
+      <tr>
+        <th>Férias</th>
+        <td>${formatYesNo(payload.inputs.incluirFerias)}</td>
+      </tr>
+      <tr>
+        <th>13º salário</th>
+        <td>${formatYesNo(payload.inputs.incluirDecimoTerceiro)}</td>
+      </tr>
+      <tr>
+        <th>Faltas no mês</th>
+        <td>${payload.inputs.faltasMes}</td>
+      </tr>
+    </table>
+
+    <h2>Detalhamento</h2>
+    <table class="detail">
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th style="text-align:right">Valor</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${breakdownRows}
+      </tbody>
+    </table>
+
+    <div class="total">
+      <span>Total estimado</span>
+      <span>${formatCurrency(payload.total)}</span>
+    </div>
+
+    <div class="footer">
+      Relatório para fins informativos. Valores podem variar conforme regras internas e convenções coletivas.
+    </div>
+  </body>
+</html>`;
+  };
+
   const calculateRescisao = () => {
     setIsCalculating(true);
 
     setTimeout(() => {
       const salario = parseCurrency(formData.salarioBase);
-      const admissao = new Date(formData.dataAdmissao);
-      const demissao = new Date(formData.dataDemissao);
-      const mesesTrabalhados = Math.floor(
-        (demissao.getTime() - admissao.getTime()) / (1000 * 60 * 60 * 24 * 30)
-      );
-      const anosTrabalhados = Math.floor(mesesTrabalhados / 12);
-      const fgts = parseCurrency(formData.fgtsDepositado);
-      const diasFerias = parseInt(formData.saldoFerias) || 0;
+      const faltas = Math.max(parseInt(formData.faltasMes, 10) || 0, 0);
+      const valorDiario = salario / 30;
+      const descontoFaltas = faltas * valorDiario;
 
       const breakdown: BreakdownItem[] = [];
       let total = 0;
 
-      // Saldo de Salário (proporcional ao mês)
-      const diasNoMes = demissao.getDate();
-      const saldoSalario = (salario / 30) * diasNoMes;
       breakdown.push({
-        label: "Saldo de Salário",
-        base: diasNoMes,
-        formulaText: `${diasNoMes} dias × (${formatCurrency(salario)} ÷ 30)`,
-        amount: saldoSalario,
+        label: "Salário base do mês",
+        base: salario,
+        formulaText: "Salário informado",
+        amount: salario,
         sign: "+",
       });
-      total += saldoSalario;
+      total += salario;
 
-      // 13º Proporcional
-      if (formData.decimoTerceiroProporcional && formData.tipoRescisao !== "COM_JUSTA_CAUSA") {
-        const mesesAno = demissao.getMonth() + 1;
-        const decimoTerceiro = (salario / 12) * mesesAno;
+      if (faltas > 0) {
         breakdown.push({
-          label: "13º Proporcional",
-          base: mesesAno,
-          formulaText: `${mesesAno} meses × (${formatCurrency(salario)} ÷ 12)`,
-          amount: decimoTerceiro,
-          sign: "+",
+          label: "Desconto por faltas",
+          base: faltas,
+          formulaText: `${faltas} faltas × (${formatCurrency(salario)} ÷ 30)`,
+          amount: descontoFaltas,
+          sign: "-",
         });
-        total += decimoTerceiro;
+        total -= descontoFaltas;
       }
 
-      // Férias + 1/3
-      if (diasFerias > 0) {
-        const valorFerias = (salario / 30) * diasFerias;
-        const tercoFerias = valorFerias / 3;
+      if (formData.incluirFerias) {
         breakdown.push({
-          label: "Férias Vencidas",
-          base: diasFerias,
-          formulaText: `${diasFerias} dias × (${formatCurrency(salario)} ÷ 30)`,
-          amount: valorFerias,
+          label: "Férias",
+          base: salario,
+          formulaText: "Salário informado",
+          amount: salario,
           sign: "+",
         });
         breakdown.push({
           label: "1/3 Constitucional",
-          base: valorFerias,
-          formulaText: `${formatCurrency(valorFerias)} ÷ 3`,
-          amount: tercoFerias,
+          base: salario,
+          formulaText: `${formatCurrency(salario)} ÷ 3`,
+          amount: salario / 3,
           sign: "+",
         });
-        total += valorFerias + tercoFerias;
+        total += salario + salario / 3;
       }
 
-      // Aviso Prévio
-      if (!formData.avisoPrevioTrabalhado && formData.tipoRescisao === "SEM_JUSTA_CAUSA") {
-        const diasAviso = 30 + anosTrabalhados * 3;
-        const avisoIndenizado = (salario / 30) * Math.min(diasAviso, 90);
+      if (formData.incluirDecimoTerceiro) {
         breakdown.push({
-          label: "Aviso Prévio Indenizado",
-          base: Math.min(diasAviso, 90),
-          formulaText: `${Math.min(diasAviso, 90)} dias × (${formatCurrency(salario)} ÷ 30)`,
-          amount: avisoIndenizado,
+          label: "13º Salário",
+          base: salario,
+          formulaText: "Salário informado",
+          amount: salario,
           sign: "+",
         });
-        total += avisoIndenizado;
+        total += salario;
       }
 
-      // Multa FGTS
-      if (formData.tipoRescisao === "SEM_JUSTA_CAUSA") {
-        const multaFgts = fgts * 0.4;
-        breakdown.push({
-          label: "Multa 40% FGTS",
-          base: fgts,
-          formulaText: `40% × ${formatCurrency(fgts)}`,
-          amount: multaFgts,
-          sign: "+",
-        });
-        total += multaFgts;
-      } else if (formData.tipoRescisao === "ACORDO_MUTUO") {
-        const multaFgts = fgts * 0.2;
-        breakdown.push({
-          label: "Multa 20% FGTS (Acordo)",
-          base: fgts,
-          formulaText: `20% × ${formatCurrency(fgts)}`,
-          amount: multaFgts,
-          sign: "+",
-        });
-        total += multaFgts;
-      }
-
-      setResult({ total, breakdown });
+      setResult({
+        total,
+        breakdown,
+        createdAt: new Date(),
+        inputs: {
+          salarioBase: salario,
+          incluirFerias: formData.incluirFerias,
+          incluirDecimoTerceiro: formData.incluirDecimoTerceiro,
+          faltasMes: faltas,
+        },
+      });
       setIsCalculating(false);
       toast.success("Simulação calculada com sucesso!");
-    }, 800);
+    }, 600);
   };
 
   const handleReset = () => {
@@ -182,39 +344,47 @@ export default function SimuladorRescisao() {
   };
 
   const handleDownloadPDF = () => {
-    toast.info("Gerando PDF...", { description: "O download iniciará em breve." });
-    setTimeout(() => {
-      toast.success("PDF gerado!", { description: "simulacao-rescisao.pdf" });
-    }, 1500);
+    if (!result) return;
+    const reportWindow = window.open("", "_blank", "width=980,height=720");
+    if (!reportWindow) {
+      toast.error("Não foi possível abrir o relatório.", {
+        description: "Permita pop-ups para gerar o PDF.",
+      });
+      return;
+    }
+    reportWindow.document.open();
+    reportWindow.document.write(buildReportHtml(result));
+    reportWindow.document.close();
+    reportWindow.focus();
+    reportWindow.print();
+    toast.info("Relatório aberto. Use \"Salvar como PDF\" no diálogo de impressão.");
   };
 
+  const faltasValue = parseInt(formData.faltasMes, 10);
   const isFormValid =
-    parseCurrency(formData.salarioBase) > 0 &&
-    formData.dataAdmissao &&
-    formData.dataDemissao &&
-    new Date(formData.dataDemissao) > new Date(formData.dataAdmissao);
+    parseCurrency(formData.salarioBase) > 0 && !Number.isNaN(faltasValue) && faltasValue >= 0;
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-5xl mx-auto space-y-6">
       <div className="space-y-1">
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="text-xs">DP</Badge>
         </div>
         <h1 className="text-2xl font-bold text-foreground">Simulador de Rescisão</h1>
         <p className="text-muted-foreground">
-          Calcule as verbas rescisórias para diferentes tipos de desligamento.
+          Simule um cálculo simplificado de rescisão com salário, férias, 13º e faltas.
         </p>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
+        <Card className="border-border/70">
           <CardHeader>
-            <CardTitle className="text-lg">Dados do Colaborador</CardTitle>
-            <CardDescription>Informe os dados para o cálculo rescisório</CardDescription>
+            <CardTitle className="text-lg">Dados da Simulação</CardTitle>
+            <CardDescription>Informe as variáveis básicas do desligamento</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="salario">Salário Base</Label>
+              <Label htmlFor="salario">Salário Base Mensal</Label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
                   R$
@@ -229,104 +399,48 @@ export default function SimuladorRescisao() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="admissao">Data Admissão</Label>
-                <Input
-                  id="admissao"
-                  type="date"
-                  value={formData.dataAdmissao}
-                  onChange={(e) =>
-                    setFormData((prev) => ({ ...prev, dataAdmissao: e.target.value }))
+            <div className="space-y-3">
+              <div className="flex items-center justify-between rounded-lg border border-border/70 px-3 py-2">
+                <div>
+                  <Label htmlFor="ferias">Incluir Férias</Label>
+                  <p className="text-xs text-muted-foreground">Somar férias + 1/3 constitucional</p>
+                </div>
+                <Switch
+                  id="ferias"
+                  checked={formData.incluirFerias}
+                  onCheckedChange={(checked) =>
+                    setFormData((prev) => ({ ...prev, incluirFerias: checked }))
                   }
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="demissao">Data Demissão</Label>
-                <Input
-                  id="demissao"
-                  type="date"
-                  value={formData.dataDemissao}
-                  onChange={(e) =>
-                    setFormData((prev) => ({ ...prev, dataDemissao: e.target.value }))
+              <div className="flex items-center justify-between rounded-lg border border-border/70 px-3 py-2">
+                <div>
+                  <Label htmlFor="decimo">Incluir 13º Salário</Label>
+                  <p className="text-xs text-muted-foreground">Adicionar um salário ao total</p>
+                </div>
+                <Switch
+                  id="decimo"
+                  checked={formData.incluirDecimoTerceiro}
+                  onCheckedChange={(checked) =>
+                    setFormData((prev) => ({ ...prev, incluirDecimoTerceiro: checked }))
                   }
                 />
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="tipo">Tipo de Rescisão</Label>
-              <Select
-                value={formData.tipoRescisao}
-                onValueChange={(value: TipoRescisao) =>
-                  setFormData((prev) => ({ ...prev, tipoRescisao: value }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(tipoRescisaoLabels).map(([key, label]) => (
-                    <SelectItem key={key} value={key}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="ferias">Dias Férias Vencidas</Label>
-                <Input
-                  id="ferias"
-                  type="number"
-                  min="0"
-                  max="60"
-                  value={formData.saldoFerias}
-                  onChange={(e) =>
-                    setFormData((prev) => ({ ...prev, saldoFerias: e.target.value }))
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="fgts">FGTS Depositado</Label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
-                    R$
-                  </span>
-                  <Input
-                    id="fgts"
-                    value={formData.fgtsDepositado}
-                    onChange={(e) => handleCurrencyInput("fgtsDepositado", e.target.value)}
-                    className="pl-10"
-                    placeholder="0,00"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-3 pt-2">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="decimo">13º Proporcional</Label>
-                <Switch
-                  id="decimo"
-                  checked={formData.decimoTerceiroProporcional}
-                  onCheckedChange={(checked) =>
-                    setFormData((prev) => ({ ...prev, decimoTerceiroProporcional: checked }))
-                  }
-                />
-              </div>
-              <div className="flex items-center justify-between">
-                <Label htmlFor="aviso">Aviso Prévio Trabalhado</Label>
-                <Switch
-                  id="aviso"
-                  checked={formData.avisoPrevioTrabalhado}
-                  onCheckedChange={(checked) =>
-                    setFormData((prev) => ({ ...prev, avisoPrevioTrabalhado: checked }))
-                  }
-                />
-              </div>
+              <Label htmlFor="faltas">Faltas no Mês</Label>
+              <Input
+                id="faltas"
+                type="number"
+                min="0"
+                value={formData.faltasMes}
+                onChange={(e) => setFormData((prev) => ({ ...prev, faltasMes: e.target.value }))}
+                placeholder="0"
+              />
+              <p className="text-xs text-muted-foreground">
+                Cada falta desconta 1/30 do salário mensal.
+              </p>
             </div>
 
             <Separator className="my-4" />
@@ -355,12 +469,13 @@ export default function SimuladorRescisao() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
             >
-              <Card className="h-full">
+              <Card className="h-full relative overflow-hidden">
+                <div className="pointer-events-none absolute -top-16 -right-16 h-36 w-36 rounded-full bg-primary/10 blur-2xl" />
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <div>
                       <CardTitle className="text-lg">Resultado</CardTitle>
-                      <CardDescription>Verbas rescisórias estimadas</CardDescription>
+                      <CardDescription>Total estimado da rescisão</CardDescription>
                     </div>
                     <Button variant="outline" size="sm" onClick={handleDownloadPDF}>
                       <FileDown className="w-4 h-4 mr-2" />
@@ -369,11 +484,49 @@ export default function SimuladorRescisao() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="p-4 rounded-lg bg-info/10 border border-info/20">
-                    <p className="text-sm text-muted-foreground mb-1">Total a Receber</p>
-                    <p className="text-3xl font-bold text-info">
+                  <div className="p-4 rounded-lg bg-primary/5 border border-primary/20">
+                    <p className="text-sm text-muted-foreground mb-1">Total Estimado</p>
+                    <p className="text-3xl font-bold text-primary">
                       {formatCurrency(result.total)}
                     </p>
+                  </div>
+
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="rounded-lg border p-3 space-y-2">
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide">
+                        Resumo
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <Badge variant="secondary">
+                          Férias: {formatYesNo(result.inputs.incluirFerias)}
+                        </Badge>
+                        <Badge variant="secondary">
+                          13º: {formatYesNo(result.inputs.incluirDecimoTerceiro)}
+                        </Badge>
+                        <Badge variant="outline">Faltas: {result.inputs.faltasMes}</Badge>
+                      </div>
+                      <div className="space-y-1 text-xs">
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Salário</span>
+                          <span className="font-medium">
+                            {formatCurrency(result.inputs.salarioBase)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Gerado em</span>
+                          <span className="font-medium">{formatDateTime(result.createdAt)}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="rounded-lg border p-3 space-y-2">
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide">
+                        Observações
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Simulação focada em salário, férias, 13º e faltas. Outras verbas não
+                        entram neste cálculo simplificado.
+                      </p>
+                    </div>
                   </div>
 
                   <div>
@@ -382,7 +535,7 @@ export default function SimuladorRescisao() {
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead>Verba</TableHead>
+                            <TableHead>Item</TableHead>
                             <TableHead className="text-right">Valor</TableHead>
                           </TableRow>
                         </TableHeader>
@@ -397,7 +550,12 @@ export default function SimuladorRescisao() {
                                   </p>
                                 </div>
                               </TableCell>
-                              <TableCell className="text-right font-mono text-sm">
+                              <TableCell
+                                className={`text-right font-mono text-sm ${
+                                  item.sign === "-" ? "text-destructive" : ""
+                                }`}
+                              >
+                                {item.sign === "-" ? "−" : ""}
                                 {formatCurrency(item.amount)}
                               </TableCell>
                             </TableRow>
@@ -407,9 +565,7 @@ export default function SimuladorRescisao() {
                     </div>
                   </div>
 
-                  <p className="text-xs text-muted-foreground">
-                    RuleSet v2 • {tipoRescisaoLabels[formData.tipoRescisao]}
-                  </p>
+                  <p className="text-xs text-muted-foreground">RuleSet simplificado v1</p>
                 </CardContent>
               </Card>
             </motion.div>
@@ -436,9 +592,8 @@ export default function SimuladorRescisao() {
       <Card className="border-warning/30 bg-warning/5">
         <CardContent className="py-3">
           <p className="text-xs text-warning-foreground">
-            ⚠️ <strong>Premissas e Limitações:</strong> Os valores apresentados são estimados.
-            Verbas adicionais como horas extras, comissões e benefícios não estão incluídas.
-            Consulte o DP para cálculo oficial.
+            ⚠️ <strong>Premissas e Limitações:</strong> Simulação simplificada e estimativa.
+            Não inclui verbas como horas extras, adicionais, comissões ou descontos legais.
           </p>
         </CardContent>
       </Card>

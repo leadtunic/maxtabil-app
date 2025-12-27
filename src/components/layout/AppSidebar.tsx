@@ -30,6 +30,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { useState } from "react";
+import { BeamsBackground } from "@/components/ui/beams-background";
 import { cn } from "@/lib/utils";
 
 const mainNav = [
@@ -90,27 +91,34 @@ export function AppSidebar() {
 
   return (
     <Sidebar className="border-r border-sidebar-border">
-      <SidebarHeader className="p-4 border-b border-sidebar-border">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 flex items-center justify-center">
-            <img
-              src="/logoescof.png"
-              alt="ESCOFER"
-              className="w-7 h-7 object-contain"
-            />
-          </div>
-          {!collapsed && (
-            <div>
-              <h1 className="font-bold text-sidebar-accent-foreground text-lg tracking-tight">
-                ESCOFER
-              </h1>
-              <p className="text-xs text-sidebar-foreground/70">Intranet</p>
+      <BeamsBackground
+        fit="parent"
+        intensity="medium"
+        className="min-h-0 h-full w-full bg-sidebar"
+        contentClassName="relative z-10 h-full w-full items-start justify-start"
+      >
+        <div className="flex h-full w-full flex-col">
+          <SidebarHeader className="p-4 border-b border-sidebar-border">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 flex items-center justify-center">
+                <img
+                  src="/logoescof.png"
+                  alt="ESCOFER"
+                  className="w-7 h-7 object-contain"
+                />
+              </div>
+              {!collapsed && (
+                <div>
+                  <h1 className="font-bold text-sidebar-accent-foreground text-lg tracking-tight">
+                    ESCOFER
+                  </h1>
+                  <p className="text-xs text-sidebar-foreground/70">Intranet</p>
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      </SidebarHeader>
+          </SidebarHeader>
 
-      <SidebarContent className="p-2">
+          <SidebarContent className="p-2">
         {/* Main Navigation */}
         <SidebarGroup>
           <SidebarGroupContent>
@@ -386,7 +394,9 @@ export function AppSidebar() {
             </CollapsibleContent>
           </Collapsible>
         </SidebarGroup>
-      </SidebarContent>
+          </SidebarContent>
+        </div>
+      </BeamsBackground>
     </Sidebar>
   );
 }

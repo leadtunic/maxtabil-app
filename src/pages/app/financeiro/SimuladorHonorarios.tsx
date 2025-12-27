@@ -115,22 +115,20 @@ export default function SimuladorHonorarios() {
       const percRegime = regimePercentual[formData.regime];
 
       // Mock ruleset values
-      const baseMin = 650;
-      const adicFuncionario = 35;
-      const adicSistemaFinanceiro = 120;
-      const adicPontoEletronico = 80;
+      const baseMin = 450;
+      const adicFuncionario = 40;
+      const descontoSistemaFinanceiro = 0.05;
+      const descontoPontoEletronico = 0.05;
 
       const valorBase = Math.max(baseMin, faturamento * percRegime);
       const ajusteSegmento = valorBase * (fatorSegmento[formData.segmento] - 1);
       const valorFuncionarios = funcionarios * adicFuncionario;
-      const valorSistemaFinanceiro = formData.sistemaFinanceiro ? adicSistemaFinanceiro : 0;
-      const valorPontoEletronico = formData.pontoEletronico ? adicPontoEletronico : 0;
-      const total =
-        valorBase +
-        ajusteSegmento +
-        valorFuncionarios +
-        valorSistemaFinanceiro +
-        valorPontoEletronico;
+      const subtotal = valorBase + ajusteSegmento + valorFuncionarios;
+      const valorSistemaFinanceiro = formData.sistemaFinanceiro
+        ? subtotal * descontoSistemaFinanceiro
+        : 0;
+      const valorPontoEletronico = formData.pontoEletronico ? subtotal * descontoPontoEletronico : 0;
+      const total = subtotal - valorSistemaFinanceiro - valorPontoEletronico;
       const totalAnual = total * 12;
       const createdAt = new Date();
       const simulationId = `sim-${createdAt.getTime().toString(36)}`;
@@ -161,21 +159,21 @@ export default function SimuladorHonorarios() {
 
       if (formData.sistemaFinanceiro) {
         breakdown.push({
-          label: "Sistema Financeiro",
-          base: 1,
-          formulaText: formatCurrency(adicSistemaFinanceiro),
+          label: "Desconto Sistema Financeiro",
+          base: subtotal,
+          formulaText: `5% × ${formatCurrency(subtotal)}`,
           amount: valorSistemaFinanceiro,
-          sign: "+",
+          sign: "-",
         });
       }
 
       if (formData.pontoEletronico) {
         breakdown.push({
-          label: "Ponto Eletrônico",
-          base: 1,
-          formulaText: formatCurrency(adicPontoEletronico),
+          label: "Desconto Ponto Eletrônico",
+          base: subtotal,
+          formulaText: `5% × ${formatCurrency(subtotal)}`,
           amount: valorPontoEletronico,
-          sign: "+",
+          sign: "-",
         });
       }
 

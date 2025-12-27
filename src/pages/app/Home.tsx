@@ -1,6 +1,9 @@
+import { useEffect, useState, type ChangeEvent } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { motion } from "framer-motion";
 import {
   Calculator,
@@ -11,7 +14,11 @@ import {
   Settings,
   ClipboardList,
   ArrowRight,
+  ImagePlus,
+  Trash2,
 } from "lucide-react";
+import { toast } from "sonner";
+import { FramerCarousel, items as defaultRecadoItems, type CarouselItem } from "@/components/ui/framer-carousel";
 
 const moduleCards = [
   {
@@ -84,7 +91,103 @@ const itemVariants = {
 };
 
 export default function Home() {
-  const { user } = useAuth();
+  const { user, hasRole } = useAuth();
+  const [recadoItems, setRecadoItems] = useState<CarouselItem[]>(defaultRecadoItems);
+  const isAdmin = hasRole("ADMIN");
+  const storageKey = "escofer.recados.carousel";
+  const maxRecadoImages = 3;
+  const maxImageSizeMb = 2;
+  const maxImageSizeBytes = maxImageSizeMb * 1024 * 1024;
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const stored = window.localStorage.getItem(storageKey);
+      if (!stored) return;
+      const parsed = JSON.parse(stored) as CarouselItem[];
+      if (Array.isArray(parsed)) {
+        setRecadoItems(parsed.slice(0, maxRecadoImages));
+      }
+    } catch {
+      window.localStorage.removeItem(storageKey);
+    }
+  }, [storageKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(
+        storageKey,
+        JSON.stringify(recadoItems.slice(0, maxRecadoImages))
+      );
+    } catch {
+      window.localStorage.removeItem(storageKey);
+    }
+  }, [recadoItems, storageKey, maxRecadoImages]);
+
+  const handleUploadRecado = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files ? Array.from(event.target.files) : [];
+    if (!files.length) return;
+
+    const remainingSlots = Math.max(0, maxRecadoImages - recadoItems.length);
+    if (!remainingSlots) {
+      toast.error(`Limite de ${maxRecadoImages} imagens atingido.`);
+      event.target.value = "";
+      return;
+    }
+
+    const validFiles = files.filter((file) => file.type.startsWith("image/"));
+    const sizeOkFiles = validFiles.filter((file) => file.size <= maxImageSizeBytes);
+    if (validFiles.length !== files.length) {
+      toast.error("Envie apenas arquivos de imagem.");
+    }
+    if (sizeOkFiles.length !== validFiles.length) {
+      toast.error(`Algumas imagens excedem ${maxImageSizeMb}MB e foram ignoradas.`);
+    }
+
+    const filesToProcess = sizeOkFiles.slice(0, remainingSlots);
+    if (!filesToProcess.length) {
+      event.target.value = "";
+      return;
+    }
+
+    const readers = filesToProcess.map(
+      (file, index) =>
+        new Promise<CarouselItem>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            resolve({
+              id: Date.now() + index,
+              url: reader.result as string,
+              title: file.name || `Recado ${recadoItems.length + index + 1}`,
+            });
+          };
+          reader.onerror = () => reject(new Error("Falha ao ler a imagem."));
+          reader.readAsDataURL(file);
+        })
+    );
+
+    Promise.allSettled(readers).then((results) => {
+      const newItems = results
+        .filter((result): result is PromiseFulfilledResult<CarouselItem> => result.status === "fulfilled")
+        .map((result) => result.value);
+
+      if (newItems.length) {
+        setRecadoItems((prev) => [...prev, ...newItems].slice(0, maxRecadoImages));
+        toast.success("Recado(s) adicionados.");
+      }
+
+      if (results.some((result) => result.status === "rejected")) {
+        toast.error("Não foi possível carregar todas as imagens.");
+      }
+    });
+
+    event.target.value = "";
+  };
+
+  const handleRemoveRecado = (id: number) => {
+    setRecadoItems((prev) => prev.filter((item) => item.id !== id));
+  };
 
   return (
     <div className="space-y-8">
@@ -101,6 +204,85 @@ export default function Home() {
           Acesse os módulos disponíveis na intranet.
         </p>
       </motion.div>
+
+      <section className="space-y-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">Recados em Imagem</h2>
+            <p className="text-sm text-muted-foreground">
+              Comunicados visuais para toda a equipe. O carrossel troca automaticamente a cada
+              8 segundos.
+            </p>
+          </div>
+          {isAdmin && (
+            <div className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+              Administrador
+            </div>
+          )}
+        </div>
+
+        <Card className="border-border/60">
+          <CardContent className="p-0">
+            <FramerCarousel items={recadoItems} autoPlayMs={8000} />
+          </CardContent>
+        </Card>
+
+        {isAdmin && (
+          <Card className="border-border/60">
+            <CardHeader>
+              <CardTitle className="text-base">Gerenciar recados</CardTitle>
+              <CardDescription>
+                Envie imagens (máximo 3) ou remova recados existentes.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <Input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handleUploadRecado}
+                />
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <ImagePlus className="h-4 w-4" />
+                JPG/PNG até {maxImageSizeMb}MB. Tamanho recomendado 1200×600.
+              </div>
+            </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {recadoItems.map((item) => (
+                  <div key={item.id} className="relative overflow-hidden rounded-xl border">
+                    <img
+                      src={item.url}
+                      alt={item.title}
+                      className="h-28 w-full object-cover"
+                    />
+                    <div className="absolute right-2 top-2">
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="destructive"
+                        className="h-8 w-8"
+                        onClick={() => handleRemoveRecado(item.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <div className="px-3 py-2 text-xs text-muted-foreground truncate">
+                      {item.title}
+                    </div>
+                  </div>
+                ))}
+                {recadoItems.length < maxRecadoImages && (
+                  <div className="flex items-center justify-center rounded-xl border border-dashed border-border/70 p-4 text-xs text-muted-foreground">
+                    Espaço disponível para novo recado
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </section>
 
       {/* Simulators Section */}
       <section>

@@ -3,11 +3,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Slider } from "@/components/ui/slider";
 import { CalendarDays, FileDown, RotateCcw } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
@@ -15,23 +13,24 @@ import type { BreakdownItem } from "@/types";
 
 interface FormData {
   salarioBase: string;
-  diasFerias: number;
-  abonoPecuniario: boolean;
-  dependentes: string;
-  adicionaisPercent: number;
+}
+
+interface SimulationResult {
+  total: number;
+  breakdown: BreakdownItem[];
+  createdAt: Date;
+  inputs: {
+    salarioBase: number;
+  };
 }
 
 const initialFormData: FormData = {
   salarioBase: "",
-  diasFerias: 30,
-  abonoPecuniario: false,
-  dependentes: "0",
-  adicionaisPercent: 0,
 };
 
 export default function SimuladorFerias() {
   const [formData, setFormData] = useState<FormData>(initialFormData);
-  const [result, setResult] = useState<{ total: number; breakdown: BreakdownItem[] } | null>(null);
+  const [result, setResult] = useState<SimulationResult | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
 
   const formatCurrency = (value: number): string => {
@@ -45,6 +44,13 @@ export default function SimuladorFerias() {
     return parseFloat(value.replace(/[^\d,]/g, "").replace(",", ".")) || 0;
   };
 
+  const formatDateTime = (value: Date): string => {
+    return new Intl.DateTimeFormat("pt-BR", {
+      dateStyle: "short",
+      timeStyle: "short",
+    }).format(value);
+  };
+
   const handleCurrencyInput = (field: keyof FormData, value: string) => {
     const numericValue = value.replace(/\D/g, "");
     const formatted = numericValue
@@ -56,100 +62,213 @@ export default function SimuladorFerias() {
     setFormData((prev) => ({ ...prev, [field]: formatted }));
   };
 
+  const buildReportHtml = (payload: SimulationResult) => {
+    const breakdownRows = payload.breakdown
+      .map(
+        (item) => `
+          <tr>
+            <td>
+              <div class="item-title">${item.label}</div>
+              <div class="item-meta">${item.formulaText}</div>
+            </td>
+            <td class="amount">${formatCurrency(item.amount)}</td>
+          </tr>
+        `
+      )
+      .join("");
+
+    return `<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <title>Relatório de Simulação - Férias</title>
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 32px 40px;
+        font-family: "Georgia", "Times New Roman", serif;
+        color: #0f172a;
+        background: #ffffff;
+      }
+      .header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        margin-bottom: 24px;
+        border-bottom: 1px solid #e2e8f0;
+        padding-bottom: 16px;
+      }
+      .eyebrow {
+        font-size: 11px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: #64748b;
+      }
+      h1 {
+        margin: 8px 0 4px;
+        font-size: 20px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+      .meta {
+        font-size: 12px;
+        color: #475569;
+      }
+      .tag {
+        border: 1px solid #0f172a;
+        padding: 6px 12px;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+      }
+      h2 {
+        margin: 20px 0 8px;
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: #1f2937;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .simple th,
+      .simple td {
+        text-align: left;
+        font-size: 13px;
+        padding: 6px 0;
+      }
+      .simple th {
+        color: #475569;
+        font-weight: 600;
+        width: 40%;
+      }
+      .detail th,
+      .detail td {
+        border-top: 1px solid #e2e8f0;
+        padding: 10px 0;
+        font-size: 13px;
+        vertical-align: top;
+      }
+      .detail th {
+        text-align: left;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: #64748b;
+      }
+      .item-title {
+        font-weight: 600;
+        margin-bottom: 4px;
+      }
+      .item-meta {
+        font-size: 12px;
+        color: #64748b;
+      }
+      .amount {
+        text-align: right;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .total {
+        margin-top: 20px;
+        border: 1px solid #0f172a;
+        padding: 14px 16px;
+        display: flex;
+        justify-content: space-between;
+        font-size: 16px;
+        font-weight: 600;
+      }
+      .footer {
+        margin-top: 24px;
+        font-size: 11px;
+        color: #64748b;
+        border-top: 1px solid #e2e8f0;
+        padding-top: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <div>
+        <div class="eyebrow">Departamento Pessoal</div>
+        <h1>Relatório de Simulação - Férias</h1>
+        <div class="meta">Gerado em ${formatDateTime(payload.createdAt)}</div>
+      </div>
+      <div class="tag">Simulação Simplificada</div>
+    </div>
+
+    <h2>Dados informados</h2>
+    <table class="simple">
+      <tr>
+        <th>Salário base</th>
+        <td>${formatCurrency(payload.inputs.salarioBase)}</td>
+      </tr>
+    </table>
+
+    <h2>Detalhamento</h2>
+    <table class="detail">
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th style="text-align:right">Valor</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${breakdownRows}
+      </tbody>
+    </table>
+
+    <div class="total">
+      <span>Total estimado</span>
+      <span>${formatCurrency(payload.total)}</span>
+    </div>
+
+    <div class="footer">
+      Relatório para fins informativos. Considere políticas internas e acordos coletivos.
+    </div>
+  </body>
+</html>`;
+  };
+
   const calculateFerias = () => {
     setIsCalculating(true);
 
     setTimeout(() => {
       const salario = parseCurrency(formData.salarioBase);
-      const diasGozados = formData.abonoPecuniario 
-        ? Math.max(formData.diasFerias - 10, 20) 
-        : formData.diasFerias;
-      const diasAbono = formData.abonoPecuniario ? Math.min(formData.diasFerias / 3, 10) : 0;
-      const adicionalPct = formData.adicionaisPercent / 100;
+      const tercoConstitucional = salario / 3;
 
-      const breakdown: BreakdownItem[] = [];
-      let total = 0;
-
-      // Salário base proporcional aos dias
-      const valorDiario = salario / 30;
-      const salarioFerias = valorDiario * diasGozados;
-      breakdown.push({
-        label: "Férias Gozadas",
-        base: diasGozados,
-        formulaText: `${diasGozados} dias × (${formatCurrency(salario)} ÷ 30)`,
-        amount: salarioFerias,
-        sign: "+",
-      });
-      total += salarioFerias;
-
-      // 1/3 Constitucional
-      const tercoConstitucional = salarioFerias / 3;
-      breakdown.push({
-        label: "1/3 Constitucional",
-        base: salarioFerias,
-        formulaText: `${formatCurrency(salarioFerias)} ÷ 3`,
-        amount: tercoConstitucional,
-        sign: "+",
-      });
-      total += tercoConstitucional;
-
-      // Abono Pecuniário
-      if (formData.abonoPecuniario && diasAbono > 0) {
-        const valorAbono = valorDiario * diasAbono;
-        const tercoAbono = valorAbono / 3;
-        breakdown.push({
-          label: "Abono Pecuniário",
-          base: diasAbono,
-          formulaText: `${diasAbono} dias × (${formatCurrency(salario)} ÷ 30)`,
-          amount: valorAbono,
+      const breakdown: BreakdownItem[] = [
+        {
+          label: "Férias (30 dias)",
+          base: salario,
+          formulaText: "Salário informado",
+          amount: salario,
           sign: "+",
-        });
-        breakdown.push({
-          label: "1/3 s/ Abono",
-          base: valorAbono,
-          formulaText: `${formatCurrency(valorAbono)} ÷ 3`,
-          amount: tercoAbono,
+        },
+        {
+          label: "1/3 Constitucional",
+          base: salario,
+          formulaText: `${formatCurrency(salario)} ÷ 3`,
+          amount: tercoConstitucional,
           sign: "+",
-        });
-        total += valorAbono + tercoAbono;
-      }
+        },
+      ];
 
-      // Adicionais (insalubridade, periculosidade, etc)
-      if (adicionalPct > 0) {
-        const valorAdicionais = (salarioFerias + tercoConstitucional) * adicionalPct;
-        breakdown.push({
-          label: `Adicionais (${formData.adicionaisPercent}%)`,
-          base: salarioFerias + tercoConstitucional,
-          formulaText: `${formData.adicionaisPercent}% × base`,
-          amount: valorAdicionais,
-          sign: "+",
-        });
-        total += valorAdicionais;
-      }
+      const total = salario + tercoConstitucional;
 
-      // Deduções INSS (simplificado)
-      const baseInss = total;
-      let aliquotaInss = 0;
-      if (baseInss <= 1412) aliquotaInss = 0.075;
-      else if (baseInss <= 2666.68) aliquotaInss = 0.09;
-      else if (baseInss <= 4000.03) aliquotaInss = 0.12;
-      else aliquotaInss = 0.14;
-
-      const descontoInss = Math.min(baseInss * aliquotaInss, 908.85);
-      breakdown.push({
-        label: "INSS (estimado)",
-        base: baseInss,
-        formulaText: `${(aliquotaInss * 100).toFixed(1)}% (progressivo)`,
-        amount: descontoInss,
-        sign: "-",
+      setResult({
+        total,
+        breakdown,
+        createdAt: new Date(),
+        inputs: {
+          salarioBase: salario,
+        },
       });
-
-      const liquido = total - descontoInss;
-
-      setResult({ total: liquido, breakdown });
       setIsCalculating(false);
       toast.success("Simulação calculada com sucesso!");
-    }, 800);
+    }, 600);
   };
 
   const handleReset = () => {
@@ -158,35 +277,45 @@ export default function SimuladorFerias() {
   };
 
   const handleDownloadPDF = () => {
-    toast.info("Gerando PDF...", { description: "O download iniciará em breve." });
-    setTimeout(() => {
-      toast.success("PDF gerado!", { description: "simulacao-ferias.pdf" });
-    }, 1500);
+    if (!result) return;
+    const reportWindow = window.open("", "_blank", "width=980,height=720");
+    if (!reportWindow) {
+      toast.error("Não foi possível abrir o relatório.", {
+        description: "Permita pop-ups para gerar o PDF.",
+      });
+      return;
+    }
+    reportWindow.document.open();
+    reportWindow.document.write(buildReportHtml(result));
+    reportWindow.document.close();
+    reportWindow.focus();
+    reportWindow.print();
+    toast.info("Relatório aberto. Use \"Salvar como PDF\" no diálogo de impressão.");
   };
 
   const isFormValid = parseCurrency(formData.salarioBase) > 0;
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-5xl mx-auto space-y-6">
       <div className="space-y-1">
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="text-xs">DP</Badge>
         </div>
         <h1 className="text-2xl font-bold text-foreground">Simulador de Férias</h1>
         <p className="text-muted-foreground">
-          Calcule os valores de férias com ou sem abono pecuniário.
+          Simule o valor de férias com base no salário e no adicional de 1/3.
         </p>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <Card>
+        <Card className="border-border/70">
           <CardHeader>
-            <CardTitle className="text-lg">Dados do Colaborador</CardTitle>
-            <CardDescription>Informe os dados para o cálculo de férias</CardDescription>
+            <CardTitle className="text-lg">Dados da Simulação</CardTitle>
+            <CardDescription>Informe o salário mensal do colaborador</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="salario">Salário Base</Label>
+              <Label htmlFor="salario">Salário Base Mensal</Label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
                   R$
@@ -201,71 +330,8 @@ export default function SimuladorFerias() {
               </div>
             </div>
 
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label>Dias de Férias: {formData.diasFerias}</Label>
-              </div>
-              <Slider
-                value={[formData.diasFerias]}
-                onValueChange={([value]) =>
-                  setFormData((prev) => ({ ...prev, diasFerias: value }))
-                }
-                min={10}
-                max={30}
-                step={5}
-                className="py-2"
-              />
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>10 dias</span>
-                <span>30 dias</span>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="dependentes">Nº de Dependentes</Label>
-              <Input
-                id="dependentes"
-                type="number"
-                min="0"
-                max="10"
-                value={formData.dependentes}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, dependentes: e.target.value }))
-                }
-              />
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label>Adicionais: {formData.adicionaisPercent}%</Label>
-              </div>
-              <Slider
-                value={[formData.adicionaisPercent]}
-                onValueChange={([value]) =>
-                  setFormData((prev) => ({ ...prev, adicionaisPercent: value }))
-                }
-                min={0}
-                max={40}
-                step={5}
-                className="py-2"
-              />
-              <p className="text-xs text-muted-foreground">
-                Insalubridade, periculosidade, noturno, etc.
-              </p>
-            </div>
-
-            <div className="flex items-center justify-between pt-2">
-              <div>
-                <Label htmlFor="abono">Abono Pecuniário</Label>
-                <p className="text-xs text-muted-foreground">Vender 1/3 das férias</p>
-              </div>
-              <Switch
-                id="abono"
-                checked={formData.abonoPecuniario}
-                onCheckedChange={(checked) =>
-                  setFormData((prev) => ({ ...prev, abonoPecuniario: checked }))
-                }
-              />
+            <div className="rounded-lg border border-border/70 p-3 text-xs text-muted-foreground">
+              O cálculo considera 30 dias de férias + 1/3 constitucional sobre o salário informado.
             </div>
 
             <Separator className="my-4" />
@@ -294,12 +360,13 @@ export default function SimuladorFerias() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
             >
-              <Card className="h-full">
+              <Card className="h-full relative overflow-hidden">
+                <div className="pointer-events-none absolute -top-16 -right-16 h-36 w-36 rounded-full bg-success/10 blur-2xl" />
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <div>
                       <CardTitle className="text-lg">Resultado</CardTitle>
-                      <CardDescription>Valor líquido estimado</CardDescription>
+                      <CardDescription>Valor estimado das férias</CardDescription>
                     </div>
                     <Button variant="outline" size="sm" onClick={handleDownloadPDF}>
                       <FileDown className="w-4 h-4 mr-2" />
@@ -309,10 +376,26 @@ export default function SimuladorFerias() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="p-4 rounded-lg bg-success/10 border border-success/20">
-                    <p className="text-sm text-muted-foreground mb-1">Valor Líquido</p>
+                    <p className="text-sm text-muted-foreground mb-1">Total Estimado</p>
                     <p className="text-3xl font-bold text-success">
                       {formatCurrency(result.total)}
                     </p>
+                  </div>
+
+                  <div className="rounded-lg border p-3 space-y-2">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Resumo</p>
+                    <div className="space-y-1 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Salário</span>
+                        <span className="font-medium">
+                          {formatCurrency(result.inputs.salarioBase)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Gerado em</span>
+                        <span className="font-medium">{formatDateTime(result.createdAt)}</span>
+                      </div>
+                    </div>
                   </div>
 
                   <div>
@@ -336,10 +419,7 @@ export default function SimuladorFerias() {
                                   </p>
                                 </div>
                               </TableCell>
-                              <TableCell className={`text-right font-mono text-sm ${
-                                item.sign === "-" ? "text-destructive" : ""
-                              }`}>
-                                {item.sign === "-" ? "−" : ""}
+                              <TableCell className="text-right font-mono text-sm">
                                 {formatCurrency(item.amount)}
                               </TableCell>
                             </TableRow>
@@ -349,10 +429,7 @@ export default function SimuladorFerias() {
                     </div>
                   </div>
 
-                  <p className="text-xs text-muted-foreground">
-                    RuleSet v1 • {formData.diasFerias} dias 
-                    {formData.abonoPecuniario ? " + abono" : ""}
-                  </p>
+                  <p className="text-xs text-muted-foreground">RuleSet simplificado v1</p>
                 </CardContent>
               </Card>
             </motion.div>
@@ -379,8 +456,8 @@ export default function SimuladorFerias() {
       <Card className="border-warning/30 bg-warning/5">
         <CardContent className="py-3">
           <p className="text-xs text-warning-foreground">
-            ⚠️ <strong>Premissas e Limitações:</strong> Os valores apresentados são estimados.
-            O cálculo de IRRF e outros descontos podem variar. Consulte o DP para valores oficiais.
+            ⚠️ <strong>Premissas e Limitações:</strong> Simulação simplificada, sem descontos legais
+            e sem adicionais específicos. Consulte o DP para valores oficiais.
           </p>
         </CardContent>
       </Card>
