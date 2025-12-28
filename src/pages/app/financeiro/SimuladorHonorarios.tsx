@@ -94,6 +94,8 @@ export default function SimuladorHonorarios() {
     }).format(value);
   };
 
+  const formatYesNo = (value: boolean): string => (value ? "Sim" : "Não");
+
   const handleCurrencyInput = (field: keyof FormData, value: string) => {
     const numericValue = value.replace(/\D/g, "");
     const formatted = numericValue
@@ -103,6 +105,214 @@ export default function SimuladorHonorarios() {
         })
       : "";
     setFormData((prev) => ({ ...prev, [field]: formatted }));
+  };
+
+  const buildReportHtml = (payload: SimulationResult) => {
+    const breakdownRows = payload.breakdown
+      .map(
+        (item) => `
+          <tr>
+            <td>
+              <div class="item-title">${item.label}</div>
+              <div class="item-meta">${item.formulaText}</div>
+            </td>
+            <td class="amount ${item.sign === "-" ? "neg" : ""}">
+              ${item.sign === "-" ? "-" : ""}${formatCurrency(item.amount)}
+            </td>
+          </tr>
+        `
+      )
+      .join("");
+
+    return `<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <title>Relatório de Simulação - Honorários</title>
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 32px 40px;
+        font-family: "Georgia", "Times New Roman", serif;
+        color: #0f172a;
+        background: #ffffff;
+      }
+      .header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        margin-bottom: 24px;
+        border-bottom: 1px solid #e2e8f0;
+        padding-bottom: 16px;
+      }
+      .eyebrow {
+        font-size: 11px;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        color: #64748b;
+      }
+      h1 {
+        margin: 8px 0 4px;
+        font-size: 20px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+      .meta {
+        font-size: 12px;
+        color: #475569;
+      }
+      .tag {
+        border: 1px solid #0f172a;
+        padding: 6px 12px;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+      }
+      h2 {
+        margin: 20px 0 8px;
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: #1f2937;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .simple th,
+      .simple td {
+        text-align: left;
+        font-size: 13px;
+        padding: 6px 0;
+      }
+      .simple th {
+        color: #475569;
+        font-weight: 600;
+        width: 40%;
+      }
+      .detail th,
+      .detail td {
+        border-top: 1px solid #e2e8f0;
+        padding: 10px 0;
+        font-size: 13px;
+        vertical-align: top;
+      }
+      .detail th {
+        text-align: left;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: #64748b;
+      }
+      .item-title {
+        font-weight: 600;
+        margin-bottom: 4px;
+      }
+      .item-meta {
+        font-size: 12px;
+        color: #64748b;
+      }
+      .amount {
+        text-align: right;
+        font-weight: 600;
+        white-space: nowrap;
+      }
+      .amount.neg {
+        color: #b91c1c;
+      }
+      .total {
+        margin-top: 20px;
+        border: 1px solid #0f172a;
+        padding: 14px 16px;
+        display: flex;
+        justify-content: space-between;
+        font-size: 16px;
+        font-weight: 600;
+      }
+      .footer {
+        margin-top: 24px;
+        font-size: 11px;
+        color: #64748b;
+        border-top: 1px solid #e2e8f0;
+        padding-top: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <div>
+        <div class="eyebrow">Financeiro</div>
+        <h1>Relatório de Simulação - Honorários</h1>
+        <div class="meta">Gerado em ${formatDateTime(payload.createdAt)}</div>
+        <div class="meta">${payload.simulationId}</div>
+      </div>
+      <div class="tag">Simulação Financeira</div>
+    </div>
+
+    <h2>Dados informados</h2>
+    <table class="simple">
+      <tr>
+        <th>Faturamento mensal</th>
+        <td>${formatCurrency(payload.inputs.faturamento)}</td>
+      </tr>
+      <tr>
+        <th>Regime tributário</th>
+        <td>${regimeLabels[payload.inputs.regime]}</td>
+      </tr>
+      <tr>
+        <th>Segmento</th>
+        <td>${segmentoLabels[payload.inputs.segmento]}</td>
+      </tr>
+      <tr>
+        <th>Nº funcionários</th>
+        <td>${payload.inputs.numFuncionarios}</td>
+      </tr>
+      <tr>
+        <th>Sistema financeiro</th>
+        <td>${formatYesNo(payload.inputs.sistemaFinanceiro)}</td>
+      </tr>
+      <tr>
+        <th>Ponto eletrônico</th>
+        <td>${formatYesNo(payload.inputs.pontoEletronico)}</td>
+      </tr>
+    </table>
+
+    <h2>Resumo</h2>
+    <table class="simple">
+      <tr>
+        <th>Honorário mensal</th>
+        <td>${formatCurrency(payload.total)}</td>
+      </tr>
+      <tr>
+        <th>Estimativa anual</th>
+        <td>${formatCurrency(payload.totalAnual)}</td>
+      </tr>
+    </table>
+
+    <h2>Detalhamento</h2>
+    <table class="detail">
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th style="text-align:right">Valor</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${breakdownRows}
+      </tbody>
+    </table>
+
+    <div class="total">
+      <span>Total mensal estimado</span>
+      <span>${formatCurrency(payload.total)}</span>
+    </div>
+
+    <div class="footer">
+      Relatório para fins informativos. Os valores podem variar conforme regras internas e políticas comerciais.
+    </div>
+  </body>
+</html>`;
   };
 
   const calculateHonorarios = () => {
@@ -203,11 +413,20 @@ export default function SimuladorHonorarios() {
   };
 
   const handleDownloadPDF = () => {
-    toast.info("Gerando PDF...", { description: "O download iniciará em breve." });
-    // Mock PDF generation
-    setTimeout(() => {
-      toast.success("PDF gerado!", { description: "simulacao-honorarios.pdf" });
-    }, 1500);
+    if (!result) return;
+    const reportWindow = window.open("", "_blank", "width=980,height=720");
+    if (!reportWindow) {
+      toast.error("Não foi possível abrir o relatório.", {
+        description: "Permita pop-ups para gerar o PDF.",
+      });
+      return;
+    }
+    reportWindow.document.open();
+    reportWindow.document.write(buildReportHtml(result));
+    reportWindow.document.close();
+    reportWindow.focus();
+    reportWindow.print();
+    toast.info("Relatório aberto. Use \"Salvar como PDF\" no diálogo de impressão.");
   };
 
   const isFormValid =
