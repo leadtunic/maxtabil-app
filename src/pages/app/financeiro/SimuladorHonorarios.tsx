@@ -8,10 +8,19 @@ import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Progress } from "@/components/ui/progress";
+import {
+  ChartContainer,
+  ChartLegend,
+  ChartLegendContent,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "@/components/ui/chart";
 import { Calculator, FileDown, RotateCcw } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import type { RegimeTributario, SegmentoEmpresa, BreakdownItem } from "@/types";
+import { Bar, BarChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 
 interface FormData {
   faturamento: string;
@@ -37,6 +46,8 @@ interface SimulationResult {
     pontoEletronico: boolean;
   };
 }
+
+type HonorarioInputs = SimulationResult["inputs"];
 
 const initialFormData: FormData = {
   faturamento: "",
@@ -69,6 +80,57 @@ const fatorSegmento: Record<SegmentoEmpresa, number> = {
   COMERCIO: 1.0,
   PRESTADOR: 1.1,
   INDUSTRIA: 1.2,
+};
+
+const baseMin = 450;
+const adicFuncionario = 40;
+const descontoSistemaFinanceiro = 0.05;
+const descontoPontoEletronico = 0.05;
+
+const projectionScenarios = [
+  { key: "conservador", label: "Conservador", annualGrowth: 0, color: "hsl(var(--warning))" },
+  { key: "base", label: "Base", annualGrowth: 0.2, color: "hsl(var(--primary))" },
+  { key: "agressivo", label: "Agressivo", annualGrowth: 0.4, color: "hsl(var(--success))" },
+] as const;
+
+const percentBands = [
+  { label: "Abaixo de 2%", max: 2 },
+  { label: "2% a 3%", max: 3 },
+  { label: "Acima de 3%", max: Infinity },
+];
+
+const baseHoursBySegment: Record<SegmentoEmpresa, number> = {
+  COMERCIO: 6,
+  PRESTADOR: 7.5,
+  INDUSTRIA: 9,
+};
+
+const regimeMultipliers: Record<RegimeTributario, number> = {
+  SIMPLES: 1,
+  LUCRO_PRESUMIDO: 1.15,
+  LUCRO_REAL: 1.3,
+};
+
+const calculateHonorario = (inputs: HonorarioInputs) => {
+  const percRegime = regimePercentual[inputs.regime];
+  const valorBase = Math.max(baseMin, inputs.faturamento * percRegime);
+  const ajusteSegmento = valorBase * (fatorSegmento[inputs.segmento] - 1);
+  const valorFuncionarios = inputs.numFuncionarios * adicFuncionario;
+  const subtotal = valorBase + ajusteSegmento + valorFuncionarios;
+  const descontoSistema = inputs.sistemaFinanceiro ? subtotal * descontoSistemaFinanceiro : 0;
+  const descontoPonto = inputs.pontoEletronico ? subtotal * descontoPontoEletronico : 0;
+  const total = subtotal - descontoSistema - descontoPonto;
+
+  return {
+    percRegime,
+    valorBase,
+    ajusteSegmento,
+    valorFuncionarios,
+    subtotal,
+    descontoSistema,
+    descontoPonto,
+    total,
+  };
 };
 
 export default function SimuladorHonorarios() {
@@ -322,47 +384,43 @@ export default function SimuladorHonorarios() {
     setTimeout(() => {
       const faturamento = parseCurrency(formData.faturamento);
       const funcionarios = parseInt(formData.numFuncionarios) || 0;
-      const percRegime = regimePercentual[formData.regime];
-
-      // Mock ruleset values
-      const baseMin = 450;
-      const adicFuncionario = 40;
-      const descontoSistemaFinanceiro = 0.05;
-      const descontoPontoEletronico = 0.05;
-
-      const valorBase = Math.max(baseMin, faturamento * percRegime);
-      const ajusteSegmento = valorBase * (fatorSegmento[formData.segmento] - 1);
-      const valorFuncionarios = funcionarios * adicFuncionario;
-      const subtotal = valorBase + ajusteSegmento + valorFuncionarios;
-      const valorSistemaFinanceiro = formData.sistemaFinanceiro
-        ? subtotal * descontoSistemaFinanceiro
-        : 0;
-      const valorPontoEletronico = formData.pontoEletronico ? subtotal * descontoPontoEletronico : 0;
-      const total = subtotal - valorSistemaFinanceiro - valorPontoEletronico;
+      const calcInputs: HonorarioInputs = {
+        faturamento,
+        regime: formData.regime,
+        segmento: formData.segmento,
+        numFuncionarios: funcionarios,
+        sistemaFinanceiro: formData.sistemaFinanceiro,
+        pontoEletronico: formData.pontoEletronico,
+      };
+      const detalhes = calculateHonorario(calcInputs);
+      const total = detalhes.total;
       const totalAnual = total * 12;
       const createdAt = new Date();
       const simulationId = `sim-${createdAt.getTime().toString(36)}`;
+      const valorSistemaFinanceiro = detalhes.descontoSistema;
+      const valorPontoEletronico = detalhes.descontoPonto;
+      const subtotal = detalhes.subtotal;
 
       const breakdown: BreakdownItem[] = [
         {
           label: "Valor Base",
           base: faturamento,
-          formulaText: `MAX(${formatCurrency(baseMin)}, ${(percRegime * 100).toFixed(1)}% × Faturamento)`,
-          amount: valorBase,
+          formulaText: `MAX(${formatCurrency(baseMin)}, ${(detalhes.percRegime * 100).toFixed(1)}% × Faturamento)`,
+          amount: detalhes.valorBase,
           sign: "+",
         },
         {
           label: `Ajuste ${segmentoLabels[formData.segmento]}`,
-          base: valorBase,
+          base: detalhes.valorBase,
           formulaText: `Valor Base × ${(fatorSegmento[formData.segmento] - 1) * 100}%`,
-          amount: ajusteSegmento,
+          amount: detalhes.ajusteSegmento,
           sign: "+",
         },
         {
           label: "Adicional Funcionários",
           base: funcionarios,
           formulaText: `${funcionarios} × ${formatCurrency(adicFuncionario)}`,
-          amount: valorFuncionarios,
+          amount: detalhes.valorFuncionarios,
           sign: "+",
         },
       ];
@@ -426,13 +484,99 @@ export default function SimuladorHonorarios() {
     reportWindow.document.close();
     reportWindow.focus();
     reportWindow.print();
-    toast.info("Relatório aberto. Use \"Salvar como PDF\" no diálogo de impressão.");
+      toast.info("Relatório aberto. Use \"Salvar como PDF\" no diálogo de impressão.");
   };
 
   const isFormValid =
     parseCurrency(formData.faturamento) > 0 &&
     formData.numFuncionarios.trim() !== "" &&
     parseInt(formData.numFuncionarios) >= 0;
+
+  const honorarioDetails = result ? calculateHonorario(result.inputs) : null;
+
+  const projectionData = result
+    ? Array.from({ length: 12 }, (_, index) => {
+        const month = `M${index + 1}`;
+        const entry: Record<string, number | string> = { month };
+        let faturamentoBase = result.inputs.faturamento;
+        let honorarioBase = result.total;
+
+        projectionScenarios.forEach((scenario) => {
+          const monthlyRate = Math.pow(1 + scenario.annualGrowth, 1 / 12) - 1;
+          const faturamento = result.inputs.faturamento * Math.pow(1 + monthlyRate, index);
+          const total = calculateHonorario({ ...result.inputs, faturamento }).total;
+          entry[scenario.key] = total;
+
+          if (scenario.key === "base") {
+            faturamentoBase = faturamento;
+            honorarioBase = total;
+          }
+        });
+
+        entry.faturamentoBase = faturamentoBase;
+        entry.percentBase = (honorarioBase / Math.max(faturamentoBase, 1)) * 100;
+        return entry;
+      })
+    : [];
+
+  const projectionTotals = projectionScenarios.map((scenario) => ({
+    key: scenario.key,
+    label: scenario.label,
+    total: projectionData.reduce((sum, item) => sum + Number(item[scenario.key] ?? 0), 0),
+  }));
+
+  const percentNow = result
+    ? (result.total / Math.max(result.inputs.faturamento, 1)) * 100
+    : 0;
+  const percentBand = percentBands.find((band) => percentNow <= band.max)?.label ?? "Acima de 3%";
+
+  const faturamentoVirada = result
+    ? baseMin / regimePercentual[result.inputs.regime]
+    : 0;
+  const gapVirada = result ? faturamentoVirada - result.inputs.faturamento : 0;
+  const progressoVirada = result && faturamentoVirada > 0
+    ? Math.min(100, (result.inputs.faturamento / faturamentoVirada) * 100)
+    : 0;
+
+  const sensitivityRevenues = [25000, 30000, 35000, 40000, 50000];
+  const sensitivityEmployees = [1, 3, 5, 10];
+  const sensitivityValues = result
+    ? sensitivityRevenues.map((revenue) =>
+        sensitivityEmployees.map((employees) =>
+          calculateHonorario({ ...result.inputs, faturamento: revenue, numFuncionarios: employees }).total
+        )
+      )
+    : [];
+  const flatSensitivity = sensitivityValues.flat();
+  const minSensitivity = flatSensitivity.length ? Math.min(...flatSensitivity) : 0;
+  const maxSensitivity = flatSensitivity.length ? Math.max(...flatSensitivity) : 0;
+
+  const baseScenarioChart = projectionData.map((entry) => ({
+    month: entry.month as string,
+    percent: Number(entry.percentBase ?? 0),
+    base: Number(entry.base ?? 0),
+  }));
+
+  const structureIndex = result
+    ? Number(result.inputs.sistemaFinanceiro) + Number(result.inputs.pontoEletronico)
+    : 0;
+  const structureLabel =
+    structureIndex === 0
+      ? "Estrutura básica"
+      : structureIndex === 1
+        ? "Estrutura intermediária"
+        : "Estrutura robusta";
+
+  const estimatedHours = result
+    ? baseHoursBySegment[result.inputs.segmento] * regimeMultipliers[result.inputs.regime] +
+      result.inputs.numFuncionarios * 0.35
+    : 0;
+  const averageMrr =
+    projectionData.length > 0
+      ? projectionData.reduce((sum, item) => sum + Number(item.base ?? 0), 0) / projectionData.length
+      : 0;
+  const month12Mrr = projectionData.length > 0 ? Number(projectionData[11].base ?? 0) : 0;
+  const clientesPorAnalista = estimatedHours > 0 ? Math.max(1, Math.floor(160 / estimatedHours)) : 0;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -695,6 +839,284 @@ export default function SimuladorHonorarios() {
           )}
         </AnimatePresence>
       </div>
+
+      {result && honorarioDetails && (
+        <section className="space-y-6">
+          <div className="space-y-1">
+            <h2 className="text-lg font-semibold text-foreground">BI do simulador de honorários</h2>
+            <p className="text-sm text-muted-foreground">
+              Seis painéis para previsibilidade, reajustes e capacidade.
+            </p>
+          </div>
+
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Card className="lg:col-span-2">
+              <CardHeader>
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <CardTitle>BI 1 • Projeção do Honorário (12 meses)</CardTitle>
+                    <CardDescription>
+                      Cenários de crescimento do faturamento mantendo a equipe atual.
+                    </CardDescription>
+                  </div>
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    {projectionTotals.map((item) => (
+                      <Badge key={item.key} variant="outline" className="border-border/60">
+                        {item.label}: {formatCurrency(item.total)}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <ChartContainer
+                  className="h-[260px] w-full aspect-auto"
+                  config={projectionScenarios.reduce<Record<string, { label: string; color: string }>>(
+                    (acc, scenario) => {
+                      acc[scenario.key] = { label: scenario.label, color: scenario.color };
+                      return acc;
+                    },
+                    {},
+                  )}
+                >
+                  <LineChart data={projectionData} margin={{ left: 10, right: 10 }}>
+                    <CartesianGrid vertical={false} />
+                    <XAxis dataKey="month" tickLine={false} axisLine={false} />
+                    <YAxis tickLine={false} axisLine={false} />
+                    <ChartTooltip
+                      cursor={false}
+                      content={
+                        <ChartTooltipContent
+                          formatter={(value) => formatCurrency(Number(value))}
+                        />
+                      }
+                    />
+                    <ChartLegend verticalAlign="top" content={<ChartLegendContent />} />
+                    {projectionScenarios.map((scenario) => (
+                      <Line
+                        key={scenario.key}
+                        type="monotone"
+                        dataKey={scenario.key}
+                        stroke={scenario.color}
+                        strokeWidth={2}
+                        dot={{ r: 3 }}
+                      />
+                    ))}
+                  </LineChart>
+                </ChartContainer>
+              </CardContent>
+            </Card>
+
+            <Card className="lg:col-span-2">
+              <CardHeader>
+                <CardTitle>BI 2 • Gatilhos de Reajuste</CardTitle>
+                <CardDescription>Quando o mínimo deixa de aplicar</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Faturamento de virada</span>
+                  <span className="font-medium">{formatCurrency(faturamentoVirada)}</span>
+                </div>
+                <Progress value={progressoVirada} />
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>
+                    {gapVirada > 0
+                      ? `Faltam ${formatCurrency(gapVirada)} para sair do mínimo.`
+                      : `Acima do gatilho em ${formatCurrency(Math.abs(gapVirada))}.`}
+                  </span>
+                  <span>{progressoVirada.toFixed(0)}%</span>
+                </div>
+                <div className="rounded-lg border border-border/60 p-3 text-xs text-muted-foreground">
+                  Cada funcionário adicional aumenta {formatCurrency(adicFuncionario)} por mês.
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="lg:col-span-2">
+              <CardHeader>
+                <CardTitle>BI 3 • Sensibilidade (Faturamento × Funcionários)</CardTitle>
+                <CardDescription>Impacto direto na variação do honorário</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="overflow-x-auto rounded-lg border border-border/60">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Faturamento</TableHead>
+                        {sensitivityEmployees.map((employees) => (
+                          <TableHead key={employees} className="text-right">
+                            {employees} func.
+                          </TableHead>
+                        ))}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {sensitivityRevenues.map((revenue, rowIndex) => (
+                        <TableRow key={revenue}>
+                          <TableCell className="font-medium">
+                            {formatCurrency(revenue)}
+                          </TableCell>
+                          {sensitivityEmployees.map((employees, colIndex) => {
+                            const value = sensitivityValues[rowIndex]?.[colIndex] ?? 0;
+                            const ratio =
+                              maxSensitivity === minSensitivity
+                                ? 0.2
+                                : (value - minSensitivity) / (maxSensitivity - minSensitivity);
+                            const backgroundOpacity = 0.08 + ratio * 0.2;
+                            return (
+                              <TableCell
+                                key={`${revenue}-${employees}`}
+                                className="text-right font-medium"
+                                style={{
+                                  backgroundColor: `hsl(var(--primary) / ${backgroundOpacity})`,
+                                }}
+                              >
+                                {formatCurrency(value)}
+                              </TableCell>
+                            );
+                          })}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Considera regime, segmento e ferramentas atuais.
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>BI 4 • Honorário como % do Faturamento</CardTitle>
+                <CardDescription>Tendência no cenário base</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-center justify-between text-sm">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Percentual atual</p>
+                    <p className="text-lg font-semibold">{percentNow.toFixed(2)}%</p>
+                  </div>
+                  <Badge variant="outline" className="border-border/60">
+                    {percentBand}
+                  </Badge>
+                </div>
+                <ChartContainer
+                  className="h-[220px] w-full aspect-auto"
+                  config={{
+                    percent: { label: "Percentual", color: "hsl(var(--info))" },
+                  }}
+                >
+                  <LineChart data={baseScenarioChart} margin={{ left: 10, right: 10 }}>
+                    <CartesianGrid vertical={false} />
+                    <XAxis dataKey="month" tickLine={false} axisLine={false} />
+                    <YAxis tickLine={false} axisLine={false} />
+                    <ChartTooltip
+                      cursor={false}
+                      content={
+                        <ChartTooltipContent
+                          formatter={(value) => `${Number(value).toFixed(2)}%`}
+                        />
+                      }
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="percent"
+                      stroke="hsl(var(--info))"
+                      strokeWidth={2}
+                      dot={{ r: 3 }}
+                    />
+                  </LineChart>
+                </ChartContainer>
+                <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                  <Badge variant="outline" className="border-border/60">Abaixo de 2%</Badge>
+                  <Badge variant="outline" className="border-border/60">2% a 3%</Badge>
+                  <Badge variant="outline" className="border-border/60">Acima de 3%</Badge>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>BI 5 • Impacto das Ferramentas</CardTitle>
+                <CardDescription>Estrutura operacional e desconto estimado</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4 text-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="outline" className="border-border/60">
+                    Índice {structureIndex}/2
+                  </Badge>
+                  <span className="text-muted-foreground">{structureLabel}</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-xs">
+                  {["Sem ferramentas", "1 ferramenta", "2 ferramentas"].map((label, index) => (
+                    <div
+                      key={label}
+                      className={`rounded-md border p-2 text-center ${
+                        index <= structureIndex ? "border-primary/40 bg-primary/10" : "border-border/60 bg-muted/30"
+                      }`}
+                    >
+                      {label}
+                    </div>
+                  ))}
+                </div>
+                <div className="rounded-lg border border-border/60 p-3 text-xs text-muted-foreground">
+                  Descontos ativos: {formatCurrency(honorarioDetails.descontoSistema + honorarioDetails.descontoPonto)}.
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="lg:col-span-2">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle>BI 6 • Previsão de Capacidade</CardTitle>
+                  <Badge variant="outline" className="border-border/60">Interno</Badge>
+                </div>
+                <CardDescription>MRR previsto e esforço estimado</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-3 sm:grid-cols-2 text-sm">
+                  <div className="rounded-lg border border-border/60 p-3">
+                    <p className="text-xs text-muted-foreground">MRR médio (12m)</p>
+                    <p className="text-lg font-semibold">{formatCurrency(averageMrr)}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Mês 12: {formatCurrency(month12Mrr)}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-border/60 p-3">
+                    <p className="text-xs text-muted-foreground">Horas estimadas / mês</p>
+                    <p className="text-lg font-semibold">{estimatedHours.toFixed(1)}h</p>
+                    <p className="text-xs text-muted-foreground">
+                      Capacidade ~{clientesPorAnalista} cliente(s) similares/analista.
+                    </p>
+                  </div>
+                </div>
+                <ChartContainer
+                  className="h-[200px] w-full aspect-auto"
+                  config={{
+                    base: { label: "MRR Base", color: "hsl(var(--primary))" },
+                  }}
+                >
+                  <BarChart data={projectionData} margin={{ left: 10, right: 10 }}>
+                    <CartesianGrid vertical={false} />
+                    <XAxis dataKey="month" tickLine={false} axisLine={false} />
+                    <YAxis tickLine={false} axisLine={false} />
+                    <ChartTooltip
+                      cursor={false}
+                      content={
+                        <ChartTooltipContent
+                          formatter={(value) => formatCurrency(Number(value))}
+                        />
+                      }
+                    />
+                    <Bar dataKey="base" fill="hsl(var(--primary))" radius={[6, 6, 0, 0]} />
+                  </BarChart>
+                </ChartContainer>
+              </CardContent>
+            </Card>
+          </div>
+        </section>
+      )}
 
       {/* Disclaimer */}
       <Card className="border-warning/30 bg-warning/5">

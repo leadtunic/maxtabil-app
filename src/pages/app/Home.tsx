@@ -16,6 +16,7 @@ import {
   ArrowRight,
   ImagePlus,
   Trash2,
+  MessageCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { FramerCarousel, items as defaultRecadoItems, type CarouselItem } from "@/components/ui/framer-carousel";
@@ -47,6 +48,15 @@ const moduleCards = [
     color: "bg-success/10 text-success-foreground",
     iconColor: "text-success",
     category: "DP",
+  },
+  {
+    title: "CRM",
+    description: "Acompanhe leads, conversas e pipeline de vendas.",
+    icon: MessageCircle,
+    href: "/app/crm/dashboard",
+    color: "bg-primary/10 text-primary-foreground",
+    iconColor: "text-primary",
+    category: "CRM",
   },
 ];
 
@@ -284,9 +294,9 @@ export default function Home() {
         )}
       </section>
 
-      {/* Simulators Section */}
+      {/* Modules Section */}
       <section>
-        <h2 className="text-lg font-semibold text-foreground mb-4">Simuladores</h2>
+        <h2 className="text-lg font-semibold text-foreground mb-4">Módulos</h2>
         <motion.div
           variants={containerVariants}
           initial="hidden"

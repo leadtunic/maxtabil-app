@@ -123,3 +123,76 @@ export interface Invite {
   expiresAt: Date;
   acceptedAt?: Date;
 }
+
+// CRM
+export type LeadSource = "META_ADS" | "ORGANIC" | "REFERRAL" | "IMPORT";
+export type LeadStatus = "NEW" | "IN_QUALIFICATION" | "MQL" | "SQL" | "DISQUALIFIED" | "CLIENT";
+export type LeadTier = "A" | "B" | "C" | "D";
+
+export interface CrmLead {
+  id: string;
+  name: string;
+  companyName?: string;
+  phoneE164: string;
+  email?: string;
+  city?: string;
+  state?: string;
+  source: LeadSource;
+  status: LeadStatus;
+  tier?: LeadTier;
+  tags: string[];
+  score: number;
+  owner?: string;
+  createdAt: Date;
+  lastContactAt: Date;
+  nextFollowUpAt?: Date;
+}
+
+export type ConversationStatus = "OPEN" | "WAITING_USER" | "WAITING_AGENT" | "HANDOFF" | "CLOSED";
+export type MessageDirection = "IN" | "OUT";
+
+export interface CrmMessage {
+  id: string;
+  direction: MessageDirection;
+  bodyText: string;
+  createdAt: Date;
+}
+
+export interface CrmConversation {
+  id: string;
+  leadId: string;
+  status: ConversationStatus;
+  messages: CrmMessage[];
+}
+
+export type DealStage =
+  | "NEW"
+  | "QUALIFYING"
+  | "SCHEDULED"
+  | "PROPOSAL"
+  | "NEGOTIATION"
+  | "WON"
+  | "LOST";
+
+export interface CrmDeal {
+  id: string;
+  leadId: string;
+  stage: DealStage;
+  valueCents?: number;
+  probability: number;
+  owner?: string;
+  createdAt: Date;
+}
+
+export type ClientContractStatus = "ACTIVE" | "PAUSED" | "CANCELLED";
+export type ClientPlan = "MEI" | "SIMPLES" | "PRESUMIDO" | "REAL" | "CUSTOM";
+
+export interface CrmClient {
+  id: string;
+  leadId: string;
+  name: string;
+  plan: ClientPlan;
+  contractStatus: ClientContractStatus;
+  monthlyFeeCents?: number;
+  startAt: Date;
+}

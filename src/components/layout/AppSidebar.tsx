@@ -10,6 +10,10 @@ import {
   ClipboardList,
   CalendarDays,
   Shield,
+  LayoutDashboard,
+  MessageCircle,
+  Columns,
+  Building2,
   ChevronDown,
 } from "lucide-react";
 import {
@@ -65,6 +69,13 @@ const adminNav = [
   { title: "Auditoria", url: "/app/admin/auditoria", icon: ClipboardList },
 ];
 
+const crmNav = [
+  { title: "Dashboard", url: "/app/crm/dashboard", icon: LayoutDashboard },
+  { title: "Leads", url: "/app/crm/leads", icon: MessageCircle },
+  { title: "Pipeline", url: "/app/crm/pipeline", icon: Columns },
+  { title: "Clientes", url: "/app/crm/clients", icon: Building2 },
+];
+
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
@@ -87,6 +98,9 @@ export function AppSidebar() {
   );
   const [adminOpen, setAdminOpen] = useState(
     location.pathname.startsWith("/app/admin")
+  );
+  const [crmOpen, setCrmOpen] = useState(
+    location.pathname.startsWith("/app/crm")
   );
 
   return (
@@ -371,6 +385,48 @@ export function AppSidebar() {
               <SidebarGroupContent>
                 <SidebarMenu className="pl-4">
                   {adminNav.map((item) => (
+                    <SidebarMenuItem key={item.title}>
+                      <SidebarMenuButton asChild>
+                        <NavLink
+                          to={item.url}
+                          className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-sidebar-accent"
+                          activeClassName="bg-sidebar-accent text-sidebar-primary font-medium"
+                        >
+                          <item.icon className="w-4 h-4" />
+                          {!collapsed && <span className="text-sm">{item.title}</span>}
+                        </NavLink>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </CollapsibleContent>
+          </Collapsible>
+        </SidebarGroup>
+
+        {/* CRM */}
+        <SidebarGroup>
+          <Collapsible open={crmOpen} onOpenChange={setCrmOpen}>
+            <CollapsibleTrigger className="w-full">
+              <SidebarGroupLabel className="flex items-center justify-between px-3 py-2 hover:bg-sidebar-accent rounded-md cursor-pointer">
+                <span className="flex items-center gap-2">
+                  <MessageCircle className="w-4 h-4" />
+                  {!collapsed && "CRM"}
+                </span>
+                {!collapsed && (
+                  <ChevronDown
+                    className={cn(
+                      "w-4 h-4 transition-transform",
+                      crmOpen && "rotate-180"
+                    )}
+                  />
+                )}
+              </SidebarGroupLabel>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <SidebarGroupContent>
+                <SidebarMenu className="pl-4">
+                  {crmNav.map((item) => (
                     <SidebarMenuItem key={item.title}>
                       <SidebarMenuButton asChild>
                         <NavLink
