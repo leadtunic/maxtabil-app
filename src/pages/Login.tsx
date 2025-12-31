@@ -40,11 +40,11 @@ export default function Login() {
 
     setIsLoading(true);
     try {
-      const success = await login(email, password);
-      if (success) {
+      const result = await login(email, password);
+      if (result.success) {
         navigate("/app");
       } else {
-        setError("Credenciais inválidas");
+        setError(result.error || "Credenciais inválidas");
       }
     } catch {
       setError("Erro ao fazer login. Tente novamente.");

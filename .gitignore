@@ -11,6 +11,10 @@ node_modules
 dist
 dist-ssr
 *.local
+.env
+.env.*
+intranet-esco-app/.env
+intranet-esco-app/.env.*
 
 # Editor directories and files
 .vscode/*

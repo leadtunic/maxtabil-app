@@ -10,9 +10,12 @@ import { CalendarDays, FileDown, RotateCcw } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import type { BreakdownItem } from "@/types";
+import { useActiveRuleSet } from "@/hooks/use-active-ruleset";
+import { getDefaultPayload } from "@/lib/rulesets";
 
 interface FormData {
   salarioBase: string;
+  diasAbono: string;
 }
 
 interface SimulationResult {
@@ -21,17 +24,27 @@ interface SimulationResult {
   createdAt: Date;
   inputs: {
     salarioBase: number;
+    diasAbono: number;
   };
 }
 
 const initialFormData: FormData = {
   salarioBase: "",
+  diasAbono: "0",
 };
+
+interface FeriasPayload {
+  tercoConstitucional: boolean;
+  limiteDiasAbono: number;
+}
 
 export default function SimuladorFerias() {
   const [formData, setFormData] = useState<FormData>(initialFormData);
   const [result, setResult] = useState<SimulationResult | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
+  const rulesetQuery = useActiveRuleSet("FERIAS");
+  const payload = (rulesetQuery.data?.payload ??
+    getDefaultPayload("FERIAS")) as FeriasPayload;
 
   const formatCurrency = (value: number): string => {
     return new Intl.NumberFormat("pt-BR", {
@@ -205,6 +218,10 @@ export default function SimuladorFerias() {
         <th>Salário base</th>
         <td>${formatCurrency(payload.inputs.salarioBase)}</td>
       </tr>
+      <tr>
+        <th>Abono</th>
+        <td>${payload.inputs.diasAbono} dias</td>
+      </tr>
     </table>
 
     <h2>Detalhamento</h2>
@@ -237,7 +254,11 @@ export default function SimuladorFerias() {
 
     setTimeout(() => {
       const salario = parseCurrency(formData.salarioBase);
-      const tercoConstitucional = salario / 3;
+      const diasAbono = Math.max(parseInt(formData.diasAbono, 10) || 0, 0);
+      const diasAbonoLimitado = Math.min(diasAbono, payload.limiteDiasAbono);
+      const valorDiario = salario / 30;
+      const valorAbono = diasAbonoLimitado > 0 ? valorDiario * diasAbonoLimitado : 0;
+      const tercoConstitucional = payload.tercoConstitucional ? salario / 3 : 0;
 
       const breakdown: BreakdownItem[] = [
         {
@@ -247,16 +268,29 @@ export default function SimuladorFerias() {
           amount: salario,
           sign: "+",
         },
-        {
+      ];
+
+      if (payload.tercoConstitucional) {
+        breakdown.push({
           label: "1/3 Constitucional",
           base: salario,
           formulaText: `${formatCurrency(salario)} ÷ 3`,
           amount: tercoConstitucional,
           sign: "+",
-        },
-      ];
+        });
+      }
 
-      const total = salario + tercoConstitucional;
+      if (valorAbono > 0) {
+        breakdown.push({
+          label: "Abono pecuniário",
+          base: diasAbonoLimitado,
+          formulaText: `${diasAbonoLimitado} dias × (${formatCurrency(salario)} ÷ 30)`,
+          amount: valorAbono,
+          sign: "+",
+        });
+      }
+
+      const total = salario + tercoConstitucional + valorAbono;
 
       setResult({
         total,
@@ -264,6 +298,7 @@ export default function SimuladorFerias() {
         createdAt: new Date(),
         inputs: {
           salarioBase: salario,
+          diasAbono: diasAbonoLimitado,
         },
       });
       setIsCalculating(false);
@@ -293,13 +328,20 @@ export default function SimuladorFerias() {
     toast.info("Relatório aberto. Use \"Salvar como PDF\" no diálogo de impressão.");
   };
 
-  const isFormValid = parseCurrency(formData.salarioBase) > 0;
+  const diasAbonoValue = parseInt(formData.diasAbono, 10);
+  const isFormValid =
+    parseCurrency(formData.salarioBase) > 0 &&
+    !Number.isNaN(diasAbonoValue) &&
+    diasAbonoValue >= 0;
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       <div className="space-y-1">
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="text-xs">DP</Badge>
+          {rulesetQuery.data?.isFallback && (
+            <Badge variant="outline" className="text-xs">RuleSet padrão</Badge>
+          )}
         </div>
         <h1 className="text-2xl font-bold text-foreground">Simulador de Férias</h1>
         <p className="text-muted-foreground">
@@ -330,8 +372,24 @@ export default function SimuladorFerias() {
               </div>
             </div>
 
+            <div className="space-y-2">
+              <Label htmlFor="abono">Dias de abono</Label>
+              <Input
+                id="abono"
+                type="number"
+                min="0"
+                value={formData.diasAbono}
+                onChange={(e) => setFormData((prev) => ({ ...prev, diasAbono: e.target.value }))}
+                placeholder="0"
+              />
+              <p className="text-xs text-muted-foreground">
+                Limite atual: {payload.limiteDiasAbono} dias.
+              </p>
+            </div>
+
             <div className="rounded-lg border border-border/70 p-3 text-xs text-muted-foreground">
-              O cálculo considera 30 dias de férias + 1/3 constitucional sobre o salário informado.
+              O cálculo considera 30 dias de férias
+              {payload.tercoConstitucional ? " + 1/3 constitucional" : ""}.
             </div>
 
             <Separator className="my-4" />
@@ -390,6 +448,10 @@ export default function SimuladorFerias() {
                         <span className="font-medium">
                           {formatCurrency(result.inputs.salarioBase)}
                         </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Abono</span>
+                        <span className="font-medium">{result.inputs.diasAbono} dias</span>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-muted-foreground">Gerado em</span>

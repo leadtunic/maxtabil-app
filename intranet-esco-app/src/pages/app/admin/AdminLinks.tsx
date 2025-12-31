@@ -1,14 +1,17 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/lib/supabase";
+import { logAudit } from "@/lib/audit";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Link2, Plus, Search, MoreHorizontal, ExternalLink, GripVertical } from "lucide-react";
+import { Link2, Plus, Search, MoreHorizontal, ExternalLink, GripVertical, Trash2 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
@@ -16,16 +19,7 @@ import type { LinkItem } from "@/types";
 
 const categories = ["Sistemas", "Portais", "Documentos", "Ferramentas", "Outros"];
 
-const mockLinks: LinkItem[] = [
-  { id: "lnk_1", title: "E-CAC", url: "https://cav.receita.fazenda.gov.br", category: "Portais", order: 1, isActive: true },
-  { id: "lnk_2", title: "SPED", url: "https://www.gov.br/receitafederal/pt-br/assuntos/orientacao-tributaria/declaracoes-e-demonstrativos/sped-sistema-publico-de-escrituracao-digital", category: "Sistemas", order: 2, isActive: true },
-  { id: "lnk_3", title: "eSocial", url: "https://login.esocial.gov.br", category: "Sistemas", order: 3, isActive: true },
-  { id: "lnk_4", title: "Conectividade Social", url: "https://conectividadesocialv2.caixa.gov.br", category: "Sistemas", order: 4, isActive: false },
-  { id: "lnk_5", title: "Simples Nacional", url: "http://www8.receita.fazenda.gov.br/SimplesNacional", category: "Portais", order: 5, isActive: true },
-];
-
 export default function AdminLinks() {
-  const [links, setLinks] = useState<LinkItem[]>(mockLinks);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("ALL");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -34,49 +28,93 @@ export default function AdminLinks() {
     title: "",
     url: "",
     category: "Sistemas",
-    isActive: true,
+    is_active: true,
   });
 
-  const filteredLinks = links.filter((link) => {
-    const matchesSearch =
-      link.title.toLowerCase().includes(search.toLowerCase()) ||
-      link.url.toLowerCase().includes(search.toLowerCase());
-    const matchesCategory = categoryFilter === "ALL" || link.category === categoryFilter;
-    return matchesSearch && matchesCategory;
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ["app_links"],
+    queryFn: async () => {
+      const { data: rows, error } = await supabase
+        .from("app_links")
+        .select("*")
+        .order("sort_order", { ascending: true });
+
+      if (error) throw error;
+      return rows as LinkItem[];
+    },
   });
 
-  const handleSaveLink = () => {
+  const links = data ?? [];
+
+  const filteredLinks = useMemo(() => {
+    return links.filter((link) => {
+      const matchesSearch =
+        link.title.toLowerCase().includes(search.toLowerCase()) ||
+        link.url.toLowerCase().includes(search.toLowerCase());
+      const matchesCategory = categoryFilter === "ALL" || link.category === categoryFilter;
+      return matchesSearch && matchesCategory;
+    });
+  }, [categoryFilter, links, search]);
+
+  const handleCloseDialog = () => {
+    setIsDialogOpen(false);
+    setEditingLink(null);
+    setFormData({ title: "", url: "", category: "Sistemas", is_active: true });
+  };
+
+  const handleSaveLink = async () => {
     if (!formData.title || !formData.url) {
       toast.error("Preencha todos os campos obrigatórios");
       return;
     }
 
     if (editingLink) {
-      setLinks((prev) =>
-        prev.map((l) =>
-          l.id === editingLink.id
-            ? { ...l, ...formData }
-            : l
-        )
-      );
+      const { error } = await supabase
+        .from("app_links")
+        .update({
+          title: formData.title,
+          url: formData.url,
+          category: formData.category,
+          is_active: formData.is_active,
+        })
+        .eq("id", editingLink.id);
+
+      if (error) {
+        toast.error("Não foi possível atualizar o link.");
+        return;
+      }
+
+      await logAudit("LINK_UPDATED", "app_links", editingLink.id, {
+        title: formData.title,
+      });
       toast.success("Link atualizado");
     } else {
-      const newLink: LinkItem = {
-        id: `lnk_${Date.now()}`,
-        ...formData,
-        order: links.length + 1,
-      };
-      setLinks((prev) => [...prev, newLink]);
+      const nextOrder = links.length ? Math.max(...links.map((l) => l.sort_order)) + 1 : 1;
+      const { data: inserted, error } = await supabase
+        .from("app_links")
+        .insert({
+          title: formData.title,
+          url: formData.url,
+          category: formData.category,
+          is_active: formData.is_active,
+          sort_order: nextOrder,
+        })
+        .select("id")
+        .single();
+
+      if (error) {
+        toast.error("Não foi possível adicionar o link.");
+        return;
+      }
+
+      await logAudit("LINK_CREATED", "app_links", inserted?.id ?? null, {
+        title: formData.title,
+      });
       toast.success("Link adicionado");
     }
 
     handleCloseDialog();
-  };
-
-  const handleCloseDialog = () => {
-    setIsDialogOpen(false);
-    setEditingLink(null);
-    setFormData({ title: "", url: "", category: "Sistemas", isActive: true });
+    refetch();
   };
 
   const handleEditLink = (link: LinkItem) => {
@@ -85,23 +123,38 @@ export default function AdminLinks() {
       title: link.title,
       url: link.url,
       category: link.category,
-      isActive: link.isActive,
+      is_active: link.is_active,
     });
     setIsDialogOpen(true);
   };
 
-  const toggleLinkStatus = (linkId: string) => {
-    setLinks((prev) =>
-      prev.map((l) =>
-        l.id === linkId ? { ...l, isActive: !l.isActive } : l
-      )
-    );
+  const toggleLinkStatus = async (link: LinkItem) => {
+    const { error } = await supabase
+      .from("app_links")
+      .update({ is_active: !link.is_active })
+      .eq("id", link.id);
+
+    if (error) {
+      toast.error("Não foi possível atualizar o status.");
+      return;
+    }
+
+    await logAudit("LINK_UPDATED", "app_links", link.id, {
+      is_active: !link.is_active,
+    });
     toast.success("Status atualizado");
+    refetch();
   };
 
-  const deleteLink = (linkId: string) => {
-    setLinks((prev) => prev.filter((l) => l.id !== linkId));
+  const deleteLink = async (link: LinkItem) => {
+    const { error } = await supabase.from("app_links").delete().eq("id", link.id);
+    if (error) {
+      toast.error("Não foi possível remover o link.");
+      return;
+    }
+    await logAudit("LINK_UPDATED", "app_links", link.id, { deleted: true });
     toast.success("Link removido");
+    refetch();
   };
 
   return (
@@ -111,80 +164,77 @@ export default function AdminLinks() {
           <h1 className="text-2xl font-bold text-foreground">Links Úteis</h1>
           <p className="text-muted-foreground">Gerencie os links da intranet</p>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={(open) => !open && handleCloseDialog()}>
-          <DialogTrigger asChild>
-            <Button onClick={() => setIsDialogOpen(true)}>
-              <Plus className="w-4 h-4 mr-2" />
-              Novo Link
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>{editingLink ? "Editar Link" : "Novo Link"}</DialogTitle>
-              <DialogDescription>
-                {editingLink ? "Atualize as informações do link" : "Adicione um novo link à intranet"}
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="title">Título</Label>
-                <Input
-                  id="title"
-                  value={formData.title}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, title: e.target.value }))}
-                  placeholder="Nome do link"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="url">URL</Label>
-                <Input
-                  id="url"
-                  type="url"
-                  value={formData.url}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, url: e.target.value }))}
-                  placeholder="https://..."
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="category">Categoria</Label>
-                <Select
-                  value={formData.category}
-                  onValueChange={(value) => setFormData((prev) => ({ ...prev, category: value }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categories.map((cat) => (
-                      <SelectItem key={cat} value={cat}>
-                        {cat}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex items-center justify-between">
-                <Label htmlFor="active">Link Ativo</Label>
-                <Switch
-                  id="active"
-                  checked={formData.isActive}
-                  onCheckedChange={(checked) =>
-                    setFormData((prev) => ({ ...prev, isActive: checked }))
-                  }
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={handleCloseDialog}>
-                Cancelar
-              </Button>
-              <Button onClick={handleSaveLink}>
-                {editingLink ? "Salvar" : "Adicionar"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <Button onClick={() => setIsDialogOpen(true)}>
+          <Plus className="w-4 h-4 mr-2" />
+          Novo Link
+        </Button>
       </div>
+
+      <Dialog open={isDialogOpen} onOpenChange={(open) => !open && handleCloseDialog()}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingLink ? "Editar Link" : "Novo Link"}</DialogTitle>
+            <DialogDescription>
+              {editingLink ? "Atualize as informações do link" : "Adicione um novo link à intranet"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="title">Título</Label>
+              <Input
+                id="title"
+                value={formData.title}
+                onChange={(e) => setFormData((prev) => ({ ...prev, title: e.target.value }))}
+                placeholder="Nome do link"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="url">URL</Label>
+              <Input
+                id="url"
+                type="url"
+                value={formData.url}
+                onChange={(e) => setFormData((prev) => ({ ...prev, url: e.target.value }))}
+                placeholder="https://..."
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="category">Categoria</Label>
+              <Select
+                value={formData.category}
+                onValueChange={(value) => setFormData((prev) => ({ ...prev, category: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((cat) => (
+                    <SelectItem key={cat} value={cat}>
+                      {cat}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="active">Link Ativo</Label>
+              <Switch
+                id="active"
+                checked={formData.is_active}
+                onCheckedChange={(checked) =>
+                  setFormData((prev) => ({ ...prev, is_active: checked }))
+                }
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={handleCloseDialog}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSaveLink}>{editingLink ? "Salvar" : "Adicionar"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Card>
         <CardHeader className="pb-4">
@@ -226,7 +276,13 @@ export default function AdminLinks() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredLinks.length === 0 ? (
+                {isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                      Carregando...
+                    </TableCell>
+                  </TableRow>
+                ) : filteredLinks.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
                       Nenhum link encontrado
@@ -241,7 +297,7 @@ export default function AdminLinks() {
                       className="border-b transition-colors hover:bg-muted/50"
                     >
                       <TableCell>
-                        <GripVertical className="w-4 h-4 text-muted-foreground cursor-grab" />
+                        <GripVertical className="w-4 h-4 text-muted-foreground" />
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-3">
@@ -254,27 +310,23 @@ export default function AdminLinks() {
                               href={link.url}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-sm text-muted-foreground hover:text-primary flex items-center gap-1"
+                              className="text-sm text-muted-foreground hover:text-primary inline-flex items-center gap-1"
                             >
-                              {link.url.slice(0, 40)}...
+                              {link.url}
                               <ExternalLink className="w-3 h-3" />
                             </a>
                           </div>
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge variant="secondary">{link.category}</Badge>
+                        <Badge variant="outline">{link.category}</Badge>
                       </TableCell>
                       <TableCell>
                         <Badge
-                          variant={link.isActive ? "default" : "secondary"}
-                          className={
-                            link.isActive
-                              ? "bg-success/10 text-success hover:bg-success/20"
-                              : ""
-                          }
+                          variant={link.is_active ? "default" : "secondary"}
+                          className={link.is_active ? "bg-success/10 text-success" : ""}
                         >
-                          {link.isActive ? "Ativo" : "Inativo"}
+                          {link.is_active ? "Ativo" : "Inativo"}
                         </Badge>
                       </TableCell>
                       <TableCell>
@@ -288,14 +340,15 @@ export default function AdminLinks() {
                             <DropdownMenuItem onClick={() => handleEditLink(link)}>
                               Editar
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => toggleLinkStatus(link.id)}>
-                              {link.isActive ? "Desativar" : "Ativar"}
+                            <DropdownMenuItem onClick={() => toggleLinkStatus(link)}>
+                              {link.is_active ? "Desativar" : "Ativar"}
                             </DropdownMenuItem>
                             <DropdownMenuItem
-                              onClick={() => deleteLink(link.id)}
                               className="text-destructive"
+                              onClick={() => deleteLink(link)}
                             >
-                              Excluir
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              Remover
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>

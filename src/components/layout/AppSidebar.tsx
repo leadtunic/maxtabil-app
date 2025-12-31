@@ -36,6 +36,7 @@ import {
 import { useState } from "react";
 import { BeamsBackground } from "@/components/ui/beams-background";
 import { cn } from "@/lib/utils";
+import { useAuthorization } from "@/hooks/use-authorization";
 
 const mainNav = [
   { title: "Início", url: "/app", icon: Home },
@@ -51,15 +52,15 @@ const dpNav = [
 ];
 
 const fiscalNav = [
-  { title: "Painel (Teste)", url: "/app/fiscal-contabil", icon: ClipboardList },
+  { title: "Fator R e DAS", url: "/app/fiscal-contabil", icon: ClipboardList },
 ];
 
 const legalizacaoNav = [
-  { title: "Painel (Teste)", url: "/app/legalizacao", icon: FileText },
+  { title: "Vencimentos", url: "/app/legalizacao", icon: FileText },
 ];
 
 const certDigNav = [
-  { title: "Painel (Teste)", url: "/app/certificado-digital", icon: Shield },
+  { title: "Vencimentos", url: "/app/certificado-digital", icon: Shield },
 ];
 
 const adminNav = [
@@ -80,6 +81,7 @@ export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const location = useLocation();
+  const { canAccess } = useAuthorization();
   
   const [financeiroOpen, setFinanceiroOpen] = useState(
     location.pathname.startsWith("/app/financeiro")
@@ -155,6 +157,7 @@ export function AppSidebar() {
         </SidebarGroup>
 
         {/* Financeiro */}
+        {canAccess("financeiro") && (
         <SidebarGroup>
           <Collapsible open={financeiroOpen} onOpenChange={setFinanceiroOpen}>
             <CollapsibleTrigger className="w-full">
@@ -195,8 +198,10 @@ export function AppSidebar() {
             </CollapsibleContent>
           </Collapsible>
         </SidebarGroup>
+        )}
 
         {/* DP */}
+        {canAccess("dp") && (
         <SidebarGroup>
           <Collapsible open={dpOpen} onOpenChange={setDpOpen}>
             <CollapsibleTrigger className="w-full">
@@ -237,8 +242,10 @@ export function AppSidebar() {
             </CollapsibleContent>
           </Collapsible>
         </SidebarGroup>
+        )}
 
         {/* Departamentos adicionais */}
+        {canAccess("fiscal-contabil") && (
         <SidebarGroup>
           <Collapsible open={fiscalOpen} onOpenChange={setFiscalOpen}>
             <CollapsibleTrigger className="w-full">
@@ -279,7 +286,9 @@ export function AppSidebar() {
             </CollapsibleContent>
           </Collapsible>
         </SidebarGroup>
+        )}
 
+        {canAccess("legalizacao") && (
         <SidebarGroup>
           <Collapsible open={legalizacaoOpen} onOpenChange={setLegalizacaoOpen}>
             <CollapsibleTrigger className="w-full">
@@ -320,7 +329,9 @@ export function AppSidebar() {
             </CollapsibleContent>
           </Collapsible>
         </SidebarGroup>
+        )}
 
+        {canAccess("certificado-digital") && (
         <SidebarGroup>
           <Collapsible open={certDigOpen} onOpenChange={setCertDigOpen}>
             <CollapsibleTrigger className="w-full">
@@ -361,8 +372,10 @@ export function AppSidebar() {
             </CollapsibleContent>
           </Collapsible>
         </SidebarGroup>
+        )}
 
         {/* Admin */}
+        {canAccess("admin") && (
         <SidebarGroup>
           <Collapsible open={adminOpen} onOpenChange={setAdminOpen}>
             <CollapsibleTrigger className="w-full">
@@ -403,8 +416,10 @@ export function AppSidebar() {
             </CollapsibleContent>
           </Collapsible>
         </SidebarGroup>
+        )}
 
         {/* CRM */}
+        {canAccess("crm") && (
         <SidebarGroup>
           <Collapsible open={crmOpen} onOpenChange={setCrmOpen}>
             <CollapsibleTrigger className="w-full">
@@ -445,6 +460,7 @@ export function AppSidebar() {
             </CollapsibleContent>
           </Collapsible>
         </SidebarGroup>
+        )}
           </SidebarContent>
         </div>
       </BeamsBackground>

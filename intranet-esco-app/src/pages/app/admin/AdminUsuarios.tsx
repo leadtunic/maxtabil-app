@@ -1,102 +1,172 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/lib/supabase";
+import { logAudit } from "@/lib/audit";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Users, Plus, Search, MoreHorizontal, Mail, Shield } from "lucide-react";
+import { Users, Plus, Search, MoreHorizontal, ShieldCheck, RefreshCcw, Trash2, UserX, UserCheck } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
-import type { User, RoleKey } from "@/types";
-
-const mockUsers: User[] = [
-  {
-    id: "usr_001",
-    name: "Administrador ESCOFER",
-    email: "admin@escofer.com.br",
-    status: "ACTIVE",
-    createdAt: new Date("2024-01-01"),
-    lastLoginAt: new Date(),
-    roles: [{ id: "r1", key: "ADMIN", name: "Administrador" }],
-  },
-  {
-    id: "usr_002",
-    name: "Maria Silva",
-    email: "maria.silva@escofer.com.br",
-    status: "ACTIVE",
-    createdAt: new Date("2024-03-15"),
-    lastLoginAt: new Date("2024-12-20"),
-    roles: [{ id: "r2", key: "FINANCEIRO", name: "Financeiro" }],
-  },
-  {
-    id: "usr_003",
-    name: "João Santos",
-    email: "joao.santos@escofer.com.br",
-    status: "DISABLED",
-    createdAt: new Date("2024-02-10"),
-    roles: [{ id: "r3", key: "DP", name: "Departamento Pessoal" }],
-  },
-];
+import type { Profile, RoleKey } from "@/types";
 
 const roleLabels: Record<RoleKey, string> = {
   ADMIN: "Administrador",
-  FISCAL_CONTABIL: "Fiscal/Contábil",
   FINANCEIRO: "Financeiro",
-  LEGALIZACAO: "Legalização",
-  CERT_DIG: "Certificado Digital",
   DP: "Departamento Pessoal",
+  FISCAL_CONTABIL: "Fiscal/Contábil",
+  LEGALIZACAO_CERT: "Legalização/Certificado",
 };
 
+const pageSize = 10;
+
 export default function AdminUsuarios() {
-  const [users, setUsers] = useState<User[]>(mockUsers);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"ALL" | "ACTIVE" | "DISABLED">("ALL");
+  const [page, setPage] = useState(1);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [newUser, setNewUser] = useState({ name: "", email: "", role: "FINANCEIRO" as RoleKey });
-
-  const filteredUsers = users.filter((user) => {
-    const matchesSearch =
-      user.name.toLowerCase().includes(search.toLowerCase()) ||
-      user.email.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = statusFilter === "ALL" || user.status === statusFilter;
-    return matchesSearch && matchesStatus;
+  const [confirmDelete, setConfirmDelete] = useState<Profile | null>(null);
+  const [resetTarget, setResetTarget] = useState<Profile | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [newUser, setNewUser] = useState({
+    display_name: "",
+    email: "",
+    role: "FINANCEIRO" as RoleKey,
+    password: "",
   });
 
-  const handleCreateUser = () => {
-    if (!newUser.name || !newUser.email) {
-      toast.error("Preencha todos os campos");
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ["profiles", search, statusFilter, page],
+    queryFn: async () => {
+      let query = supabase.from("profiles").select("*", { count: "exact" });
+
+      if (search.trim()) {
+        query = query.or(
+          `email.ilike.%${search.trim()}%,display_name.ilike.%${search.trim()}%`,
+        );
+      }
+
+      if (statusFilter !== "ALL") {
+        query = query.eq("is_active", statusFilter === "ACTIVE");
+      }
+
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+
+      const { data: rows, error, count } = await query
+        .order("created_at", { ascending: false })
+        .range(from, to);
+
+      if (error) throw error;
+
+      return { rows: rows as Profile[], count: count ?? 0 };
+    },
+  });
+
+  const profiles = data?.rows ?? [];
+  const totalPages = useMemo(
+    () => Math.max(1, Math.ceil((data?.count ?? 0) / pageSize)),
+    [data?.count],
+  );
+
+  const handleCreateUser = async () => {
+    if (!newUser.display_name || !newUser.email || !newUser.password) {
+      toast.error("Preencha todos os campos obrigatórios.");
       return;
     }
 
-    const user: User = {
-      id: `usr_${Date.now()}`,
-      name: newUser.name,
-      email: newUser.email,
-      status: "ACTIVE",
-      createdAt: new Date(),
-      roles: [{ id: `r_${Date.now()}`, key: newUser.role, name: roleLabels[newUser.role] }],
-    };
+    const { error } = await supabase.functions.invoke("admin_create_user", {
+      body: {
+        email: newUser.email,
+        password: newUser.password,
+        display_name: newUser.display_name,
+        role: newUser.role,
+      },
+    });
 
-    setUsers((prev) => [...prev, user]);
+    if (error) {
+      toast.error("Falha ao criar usuário.", { description: error.message });
+      return;
+    }
+
+    toast.success("Usuário criado com sucesso!");
     setIsDialogOpen(false);
-    setNewUser({ name: "", email: "", role: "FINANCEIRO" });
-    toast.success("Convite enviado!", { description: `Um e-mail foi enviado para ${newUser.email}` });
+    setNewUser({ display_name: "", email: "", role: "FINANCEIRO", password: "" });
+    refetch();
   };
 
-  const toggleUserStatus = (userId: string) => {
-    setUsers((prev) =>
-      prev.map((u) =>
-        u.id === userId
-          ? { ...u, status: u.status === "ACTIVE" ? "DISABLED" : "ACTIVE" }
-          : u
-      )
-    );
-    toast.success("Status atualizado");
+  const handleResetPassword = async () => {
+    if (!resetTarget || !newPassword) {
+      toast.error("Informe a nova senha.");
+      return;
+    }
+
+    const { error } = await supabase.functions.invoke("admin_reset_password", {
+      body: { user_id: resetTarget.user_id, new_password: newPassword },
+    });
+
+    if (error) {
+      toast.error("Falha ao resetar senha.", { description: error.message });
+      return;
+    }
+
+    toast.success("Senha resetada e troca obrigatória ativada.");
+    setResetTarget(null);
+    setNewPassword("");
+  };
+
+  const handleDisableUser = async (profile: Profile) => {
+    const { error } = await supabase.functions.invoke("admin_disable_or_delete_user", {
+      body: { user_id: profile.user_id, mode: "disable" },
+    });
+
+    if (error) {
+      toast.error("Não foi possível desativar.", { description: error.message });
+      return;
+    }
+
+    toast.success("Usuário desativado.");
+    refetch();
+  };
+
+  const handleEnableUser = async (profile: Profile) => {
+    const { error } = await supabase
+      .from("profiles")
+      .update({ is_active: true })
+      .eq("user_id", profile.user_id);
+
+    if (error) {
+      toast.error("Não foi possível ativar.", { description: error.message });
+      return;
+    }
+
+    await logAudit("USER_UPDATED", "profiles", profile.user_id, { is_active: true });
+    toast.success("Usuário ativado.");
+    refetch();
+  };
+
+  const handleDeleteUser = async () => {
+    if (!confirmDelete) return;
+
+    const { error } = await supabase.functions.invoke("admin_disable_or_delete_user", {
+      body: { user_id: confirmDelete.user_id, mode: "delete" },
+    });
+
+    if (error) {
+      toast.error("Não foi possível excluir.", { description: error.message });
+      return;
+    }
+
+    toast.success("Usuário excluído.");
+    setConfirmDelete(null);
+    refetch();
   };
 
   return (
@@ -106,73 +176,115 @@ export default function AdminUsuarios() {
           <h1 className="text-2xl font-bold text-foreground">Usuários</h1>
           <p className="text-muted-foreground">Gerencie os usuários da intranet</p>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="w-4 h-4 mr-2" />
-              Novo Usuário
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Convidar Usuário</DialogTitle>
-              <DialogDescription>
-                Um e-mail será enviado para ativar a conta.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Nome Completo</Label>
-                <Input
-                  id="name"
-                  value={newUser.name}
-                  onChange={(e) => setNewUser((prev) => ({ ...prev, name: e.target.value }))}
-                  placeholder="Nome do colaborador"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="email">E-mail</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={newUser.email}
-                  onChange={(e) => setNewUser((prev) => ({ ...prev, email: e.target.value }))}
-                  placeholder="email@escofer.com.br"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="role">Perfil de Acesso</Label>
-                <Select
-                  value={newUser.role}
-                  onValueChange={(value: RoleKey) =>
-                    setNewUser((prev) => ({ ...prev, role: value }))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(roleLabels).map(([key, label]) => (
-                      <SelectItem key={key} value={key}>
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
-                Cancelar
-              </Button>
-              <Button onClick={handleCreateUser}>
-                <Mail className="w-4 h-4 mr-2" />
-                Enviar Convite
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <Button onClick={() => setIsDialogOpen(true)}>
+          <Plus className="w-4 h-4 mr-2" />
+          Novo Usuário
+        </Button>
       </div>
+
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Criar usuário</DialogTitle>
+            <DialogDescription>Defina o perfil e a senha inicial do colaborador.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">Nome completo</Label>
+              <Input
+                id="name"
+                value={newUser.display_name}
+                onChange={(e) => setNewUser((prev) => ({ ...prev, display_name: e.target.value }))}
+                placeholder="Nome do colaborador"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="email">E-mail</Label>
+              <Input
+                id="email"
+                type="email"
+                value={newUser.email}
+                onChange={(e) => setNewUser((prev) => ({ ...prev, email: e.target.value }))}
+                placeholder="email@escofer.com.br"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="role">Perfil</Label>
+              <Select
+                value={newUser.role}
+                onValueChange={(value: RoleKey) => setNewUser((prev) => ({ ...prev, role: value }))}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(roleLabels).map(([key, label]) => (
+                    <SelectItem key={key} value={key}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">Senha inicial</Label>
+              <Input
+                id="password"
+                type="password"
+                value={newUser.password}
+                onChange={(e) => setNewUser((prev) => ({ ...prev, password: e.target.value }))}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleCreateUser}>Criar usuário</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(resetTarget)} onOpenChange={() => setResetTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Resetar senha</DialogTitle>
+            <DialogDescription>
+              Informe a nova senha. O usuário será forçado a trocar no próximo login.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="reset-password">Nova senha</Label>
+            <Input
+              id="reset-password"
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setResetTarget(null)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleResetPassword}>Atualizar senha</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={Boolean(confirmDelete)} onOpenChange={() => setConfirmDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir usuário?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação remove o usuário permanentemente do sistema.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteUser}>Excluir</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Card>
         <CardHeader className="pb-4">
@@ -209,21 +321,26 @@ export default function AdminUsuarios() {
                   <TableHead>Usuário</TableHead>
                   <TableHead>Perfil</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Último Acesso</TableHead>
                   <TableHead className="w-12"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredUsers.length === 0 ? (
+                {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                      Carregando...
+                    </TableCell>
+                  </TableRow>
+                ) : profiles.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
                       Nenhum usuário encontrado
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredUsers.map((user) => (
+                  profiles.map((profile) => (
                     <motion.tr
-                      key={user.id}
+                      key={profile.user_id}
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       className="border-b transition-colors hover:bg-muted/50"
@@ -234,41 +351,34 @@ export default function AdminUsuarios() {
                             <Users className="w-4 h-4 text-primary" />
                           </div>
                           <div>
-                            <p className="font-medium">{user.name}</p>
-                            <p className="text-sm text-muted-foreground">{user.email}</p>
+                            <p className="font-medium">{profile.display_name}</p>
+                            <p className="text-sm text-muted-foreground">{profile.email}</p>
                           </div>
                         </div>
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-1">
-                          {user.roles.map((role) => (
-                            <Badge
-                              key={role.id}
-                              variant={role.key === "ADMIN" ? "default" : "secondary"}
-                              className="text-xs"
-                            >
-                              {role.key === "ADMIN" && <Shield className="w-3 h-3 mr-1" />}
-                              {role.name}
-                            </Badge>
-                          ))}
-                        </div>
+                        <Badge
+                          variant={profile.role === "ADMIN" ? "default" : "secondary"}
+                          className="text-xs"
+                        >
+                          {profile.role === "ADMIN" && <ShieldCheck className="w-3 h-3 mr-1" />}
+                          {roleLabels[profile.role]}
+                        </Badge>
+                        {profile.must_change_password && (
+                          <Badge variant="outline" className="ml-2 text-xs">
+                            Troca pendente
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Badge
-                          variant={user.status === "ACTIVE" ? "default" : "secondary"}
+                          variant={profile.is_active ? "default" : "secondary"}
                           className={
-                            user.status === "ACTIVE"
-                              ? "bg-success/10 text-success hover:bg-success/20"
-                              : ""
+                            profile.is_active ? "bg-success/10 text-success hover:bg-success/20" : ""
                           }
                         >
-                          {user.status === "ACTIVE" ? "Ativo" : "Inativo"}
+                          {profile.is_active ? "Ativo" : "Inativo"}
                         </Badge>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {user.lastLoginAt
-                          ? user.lastLoginAt.toLocaleDateString("pt-BR")
-                          : "Nunca"}
                       </TableCell>
                       <TableCell>
                         <DropdownMenu>
@@ -278,11 +388,28 @@ export default function AdminUsuarios() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem>Editar</DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => toggleUserStatus(user.id)}>
-                              {user.status === "ACTIVE" ? "Desativar" : "Ativar"}
+                            <DropdownMenuItem onClick={() => setResetTarget(profile)}>
+                              <RefreshCcw className="w-4 h-4 mr-2" />
+                              Resetar senha
                             </DropdownMenuItem>
-                            <DropdownMenuItem>Reenviar Convite</DropdownMenuItem>
+                            {profile.is_active ? (
+                              <DropdownMenuItem onClick={() => handleDisableUser(profile)}>
+                                <UserX className="w-4 h-4 mr-2" />
+                                Desativar
+                              </DropdownMenuItem>
+                            ) : (
+                              <DropdownMenuItem onClick={() => handleEnableUser(profile)}>
+                                <UserCheck className="w-4 h-4 mr-2" />
+                                Ativar
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem
+                              className="text-destructive"
+                              onClick={() => setConfirmDelete(profile)}
+                            >
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              Excluir
+                            </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
@@ -291,6 +418,29 @@ export default function AdminUsuarios() {
                 )}
               </TableBody>
             </Table>
+          </div>
+          <div className="flex items-center justify-between mt-4">
+            <span className="text-sm text-muted-foreground">
+              Página {page} de {totalPages}
+            </span>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page <= 1}
+                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+              >
+                Anterior
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page >= totalPages}
+                onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+              >
+                Próxima
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

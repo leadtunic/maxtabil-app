@@ -1,37 +1,31 @@
 // User & Auth Types
-export interface User {
+export type RoleKey =
+  | "ADMIN"
+  | "FINANCEIRO"
+  | "DP"
+  | "FISCAL_CONTABIL"
+  | "LEGALIZACAO_CERT";
+
+export interface Profile {
+  user_id: string;
+  email: string;
+  display_name: string;
+  role: RoleKey;
+  is_active: boolean;
+  must_change_password: boolean;
+  created_by?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AuthUser {
   id: string;
   name: string;
   email: string;
-  status: "ACTIVE" | "DISABLED";
-  createdAt: Date;
-  lastLoginAt?: Date;
-  roles: Role[];
+  role: RoleKey;
+  isActive: boolean;
+  mustChangePassword: boolean;
 }
-
-export interface Role {
-  id: string;
-  key: RoleKey;
-  name: string;
-}
-
-export type RoleKey = 
-  | "ADMIN" 
-  | "FISCAL_CONTABIL" 
-  | "FINANCEIRO" 
-  | "LEGALIZACAO" 
-  | "CERT_DIG" 
-  | "DP";
-
-export type PermissionKey =
-  | "MANAGE_USERS"
-  | "MANAGE_LINKS"
-  | "VIEW_FIN_SIM"
-  | "RUN_FIN_SIM"
-  | "VIEW_DP_SIM"
-  | "RUN_DP_SIM"
-  | "MANAGE_RULESETS"
-  | "VIEW_AUDIT";
 
 // Links
 export interface LinkItem {
@@ -39,22 +33,30 @@ export interface LinkItem {
   title: string;
   url: string;
   category: string;
-  order: number;
-  isActive: boolean;
+  is_active: boolean;
+  sort_order: number;
+  updated_at?: string;
 }
 
 // RuleSets
 export interface RuleSet {
   id: string;
-  type: RuleSetType;
+  simulator_key: RuleSetKey;
+  name: string;
   version: number;
-  isActive: boolean;
+  is_active: boolean;
   payload: Record<string, unknown>;
-  createdBy: string;
-  createdAt: Date;
+  created_by?: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
-export type RuleSetType = "HONORARIOS" | "RESCISAO" | "FERIAS";
+export type RuleSetKey =
+  | "HONORARIOS"
+  | "RESCISAO"
+  | "FERIAS"
+  | "FATOR_R"
+  | "SIMPLES_DAS";
 
 // Simulations
 export interface BreakdownItem {
@@ -67,13 +69,13 @@ export interface BreakdownItem {
 
 export interface Simulation {
   id: string;
-  type: RuleSetType;
+  type: RuleSetKey;
   inputs: Record<string, unknown>;
   outputs: { total: number };
   breakdown: BreakdownItem[];
   rulesetId: string;
   createdBy: string;
-  createdAt: Date;
+  createdAt: string;
 }
 
 // Honorários
@@ -96,6 +98,8 @@ export interface RescisaoInput {
   incluirFerias: boolean;
   incluirDecimoTerceiro: boolean;
   faltasMes: number;
+  anosServico: number;
+  tipoRescisao: "SEM_JUSTA_CAUSA" | "ACORDO";
 }
 
 // Férias
@@ -106,13 +110,13 @@ export interface FeriasInput {
 // Audit
 export interface AuditLog {
   id: string;
-  actorUserId: string;
-  actorName: string;
+  actor_user_id: string;
+  actor_email: string;
   action: string;
-  entityType: string;
-  entityId: string;
+  entity_type: string;
+  entity_id: string | null;
   metadata: Record<string, unknown>;
-  createdAt: Date;
+  created_at: string;
 }
 
 // Invite
@@ -120,8 +124,38 @@ export interface Invite {
   token: string;
   email: string;
   rolePreset: RoleKey;
-  expiresAt: Date;
-  acceptedAt?: Date;
+  expiresAt: string;
+  acceptedAt?: string;
+}
+
+// Legalizacao
+export type LegalDocType = "CND" | "BOMBEIRO_AVCB" | "SANITARIA" | "ALVARA";
+
+export interface LegalDoc {
+  id: string;
+  client_name: string;
+  cnpj?: string | null;
+  doc_type: LegalDocType;
+  issue_date?: string | null;
+  expiry_date: string;
+  notes?: string | null;
+  attachment_url?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// Certificado Digital
+export interface DigitalCert {
+  id: string;
+  client_name: string;
+  cnpj?: string | null;
+  cert_type: string;
+  provider?: string | null;
+  expiry_date: string;
+  notes?: string | null;
+  attachment_url?: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 // CRM

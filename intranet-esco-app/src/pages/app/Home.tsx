@@ -12,6 +12,7 @@ import {
   ClipboardList,
   ArrowRight,
 } from "lucide-react";
+import { useAuthorization } from "@/hooks/use-authorization";
 
 const moduleCards = [
   {
@@ -22,6 +23,7 @@ const moduleCards = [
     color: "bg-accent/10 text-accent-foreground",
     iconColor: "text-accent",
     category: "Financeiro",
+    routeKey: "financeiro",
   },
   {
     title: "Simulador de Rescisão",
@@ -31,6 +33,7 @@ const moduleCards = [
     color: "bg-info/10 text-info-foreground",
     iconColor: "text-info",
     category: "DP",
+    routeKey: "dp",
   },
   {
     title: "Simulador de Férias",
@@ -40,6 +43,7 @@ const moduleCards = [
     color: "bg-success/10 text-success-foreground",
     iconColor: "text-success",
     category: "DP",
+    routeKey: "dp",
   },
 ];
 
@@ -49,24 +53,28 @@ const adminCards = [
     description: "Gerenciar usuários e permissões",
     icon: Users,
     href: "/app/admin/usuarios",
+    routeKey: "admin",
   },
   {
     title: "Links",
     description: "Gerenciar links úteis",
     icon: Link2,
     href: "/app/admin/links",
+    routeKey: "admin",
   },
   {
     title: "Regras",
     description: "Gerenciar regras de cálculo",
     icon: Settings,
     href: "/app/admin/regras",
+    routeKey: "admin",
   },
   {
     title: "Auditoria",
     description: "Visualizar logs de auditoria",
     icon: ClipboardList,
     href: "/app/admin/auditoria",
+    routeKey: "admin",
   },
 ];
 
@@ -85,6 +93,10 @@ const itemVariants = {
 
 export default function Home() {
   const { user } = useAuth();
+  const { canAccess } = useAuthorization();
+  const isAdmin = canAccess("admin");
+  const visibleModuleCards = moduleCards.filter((card) => canAccess(card.routeKey));
+  const visibleAdminCards = adminCards.filter((card) => canAccess(card.routeKey));
 
   return (
     <div className="space-y-8">
@@ -111,7 +123,7 @@ export default function Home() {
           animate="visible"
           className="grid gap-4 md:grid-cols-2 lg:grid-cols-3"
         >
-          {moduleCards.map((card) => (
+          {visibleModuleCards.map((card) => (
             <motion.div key={card.title} variants={itemVariants}>
               <Link to={card.href}>
                 <Card className="h-full hover:shadow-lg transition-all duration-200 hover:-translate-y-1 group cursor-pointer border-border/50">
@@ -145,6 +157,7 @@ export default function Home() {
       </section>
 
       {/* Admin Section */}
+      {isAdmin && (
       <section>
         <h2 className="text-lg font-semibold text-foreground mb-4">Administração</h2>
         <motion.div
@@ -153,7 +166,7 @@ export default function Home() {
           animate="visible"
           className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
         >
-          {adminCards.map((card) => (
+          {visibleAdminCards.map((card) => (
             <motion.div key={card.title} variants={itemVariants}>
               <Link to={card.href}>
                 <Card className="hover:shadow-md transition-all duration-200 group cursor-pointer border-border/50 hover:border-primary/20">
@@ -178,6 +191,7 @@ export default function Home() {
           ))}
         </motion.div>
       </section>
+      )}
 
       {/* Disclaimer */}
       <div className="mt-8 p-4 rounded-lg bg-muted/50 border border-border">

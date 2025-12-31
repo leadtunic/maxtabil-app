@@ -11,12 +11,17 @@ import { FileDown, FileText, RotateCcw } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import type { BreakdownItem } from "@/types";
+import { useActiveRuleSet } from "@/hooks/use-active-ruleset";
+import { getDefaultPayload } from "@/lib/rulesets";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface FormData {
   salarioBase: string;
   incluirFerias: boolean;
   incluirDecimoTerceiro: boolean;
   faltasMes: string;
+  anosServico: string;
+  tipoRescisao: "SEM_JUSTA_CAUSA" | "ACORDO";
 }
 
 interface SimulationResult {
@@ -28,6 +33,8 @@ interface SimulationResult {
     incluirFerias: boolean;
     incluirDecimoTerceiro: boolean;
     faltasMes: number;
+    anosServico: number;
+    tipoRescisao: "SEM_JUSTA_CAUSA" | "ACORDO";
   };
 }
 
@@ -36,12 +43,24 @@ const initialFormData: FormData = {
   incluirFerias: false,
   incluirDecimoTerceiro: false,
   faltasMes: "0",
+  anosServico: "0",
+  tipoRescisao: "SEM_JUSTA_CAUSA",
 };
+
+interface RescisaoPayload {
+  multaFgts: number;
+  multaAcordo: number;
+  diasAvisoPrevioBase: number;
+  diasAvisoPrevioPorAno: number;
+}
 
 export default function SimuladorRescisao() {
   const [formData, setFormData] = useState<FormData>(initialFormData);
   const [result, setResult] = useState<SimulationResult | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
+  const rulesetQuery = useActiveRuleSet("RESCISAO");
+  const payload = (rulesetQuery.data?.payload ??
+    getDefaultPayload("RESCISAO")) as RescisaoPayload;
 
   const formatCurrency = (value: number): string => {
     return new Intl.NumberFormat("pt-BR", {
@@ -234,6 +253,14 @@ export default function SimuladorRescisao() {
         <th>Faltas no mês</th>
         <td>${payload.inputs.faltasMes}</td>
       </tr>
+      <tr>
+        <th>Anos de serviço</th>
+        <td>${payload.inputs.anosServico}</td>
+      </tr>
+      <tr>
+        <th>Tipo de rescisão</th>
+        <td>${payload.inputs.tipoRescisao === "ACORDO" ? "Acordo" : "Sem justa causa"}</td>
+      </tr>
     </table>
 
     <h2>Detalhamento</h2>
@@ -267,8 +294,11 @@ export default function SimuladorRescisao() {
     setTimeout(() => {
       const salario = parseCurrency(formData.salarioBase);
       const faltas = Math.max(parseInt(formData.faltasMes, 10) || 0, 0);
+      const anosServico = Math.max(parseInt(formData.anosServico, 10) || 0, 0);
       const valorDiario = salario / 30;
       const descontoFaltas = faltas * valorDiario;
+      const avisoDias = payload.diasAvisoPrevioBase + anosServico * payload.diasAvisoPrevioPorAno;
+      const avisoValor = avisoDias > 0 ? valorDiario * avisoDias : 0;
 
       const breakdown: BreakdownItem[] = [];
       let total = 0;
@@ -322,6 +352,31 @@ export default function SimuladorRescisao() {
         total += salario;
       }
 
+      if (avisoValor > 0) {
+        breakdown.push({
+          label: "Aviso prévio",
+          base: avisoDias,
+          formulaText: `${avisoDias} dias × (${formatCurrency(salario)} ÷ 30)`,
+          amount: avisoValor,
+          sign: "+",
+        });
+        total += avisoValor;
+      }
+
+      const multaPercent =
+        formData.tipoRescisao === "ACORDO" ? payload.multaAcordo : payload.multaFgts;
+      const multaValor = salario * multaPercent;
+      if (multaValor > 0) {
+        breakdown.push({
+          label: "Multa FGTS",
+          base: multaPercent,
+          formulaText: `${(multaPercent * 100).toFixed(0)}% × ${formatCurrency(salario)}`,
+          amount: multaValor,
+          sign: "+",
+        });
+        total += multaValor;
+      }
+
       setResult({
         total,
         breakdown,
@@ -331,6 +386,8 @@ export default function SimuladorRescisao() {
           incluirFerias: formData.incluirFerias,
           incluirDecimoTerceiro: formData.incluirDecimoTerceiro,
           faltasMes: faltas,
+          anosServico,
+          tipoRescisao: formData.tipoRescisao,
         },
       });
       setIsCalculating(false);
@@ -361,14 +418,22 @@ export default function SimuladorRescisao() {
   };
 
   const faltasValue = parseInt(formData.faltasMes, 10);
+  const anosValue = parseInt(formData.anosServico, 10);
   const isFormValid =
-    parseCurrency(formData.salarioBase) > 0 && !Number.isNaN(faltasValue) && faltasValue >= 0;
+    parseCurrency(formData.salarioBase) > 0 &&
+    !Number.isNaN(faltasValue) &&
+    faltasValue >= 0 &&
+    !Number.isNaN(anosValue) &&
+    anosValue >= 0;
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
       <div className="space-y-1">
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="text-xs">DP</Badge>
+          {rulesetQuery.data?.isFallback && (
+            <Badge variant="outline" className="text-xs">RuleSet padrão</Badge>
+          )}
         </div>
         <h1 className="text-2xl font-bold text-foreground">Simulador de Rescisão</h1>
         <p className="text-muted-foreground">
@@ -443,6 +508,39 @@ export default function SimuladorRescisao() {
               </p>
             </div>
 
+            <div className="space-y-2">
+              <Label htmlFor="anos">Anos de serviço</Label>
+              <Input
+                id="anos"
+                type="number"
+                min="0"
+                value={formData.anosServico}
+                onChange={(e) => setFormData((prev) => ({ ...prev, anosServico: e.target.value }))}
+                placeholder="0"
+              />
+              <p className="text-xs text-muted-foreground">
+                Usado para calcular dias de aviso prévio.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Tipo de rescisão</Label>
+              <Select
+                value={formData.tipoRescisao}
+                onValueChange={(value) =>
+                  setFormData((prev) => ({ ...prev, tipoRescisao: value as FormData["tipoRescisao"] }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="SEM_JUSTA_CAUSA">Sem justa causa</SelectItem>
+                  <SelectItem value="ACORDO">Acordo</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             <Separator className="my-4" />
 
             <div className="flex gap-3">
@@ -504,6 +602,10 @@ export default function SimuladorRescisao() {
                           13º: {formatYesNo(result.inputs.incluirDecimoTerceiro)}
                         </Badge>
                         <Badge variant="outline">Faltas: {result.inputs.faltasMes}</Badge>
+                        <Badge variant="outline">Anos: {result.inputs.anosServico}</Badge>
+                        <Badge variant="outline">
+                          Tipo: {result.inputs.tipoRescisao === "ACORDO" ? "Acordo" : "Sem justa causa"}
+                        </Badge>
                       </div>
                       <div className="space-y-1 text-xs">
                         <div className="flex items-center justify-between">

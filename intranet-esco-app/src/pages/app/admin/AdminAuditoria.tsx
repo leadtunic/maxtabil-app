@@ -1,115 +1,109 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ClipboardList, Search, Download, Filter, User, Settings, FileText, Link2 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ClipboardList, Search, Filter, User, Settings, FileText, Link2, KeyRound } from "lucide-react";
 import { motion } from "framer-motion";
 import type { AuditLog } from "@/types";
 
 const actionIcons: Record<string, React.ElementType> = {
   USER_CREATED: User,
   USER_UPDATED: User,
+  USER_DISABLED: User,
+  USER_DELETED: User,
+  PASSWORD_RESET: KeyRound,
   LINK_CREATED: Link2,
   LINK_UPDATED: Link2,
   RULESET_CREATED: Settings,
+  RULESET_UPDATED: Settings,
   RULESET_ACTIVATED: Settings,
+  LEGAL_DOC_UPSERT: FileText,
+  LEGAL_DOC_DELETED: FileText,
+  DIGITAL_CERT_UPSERT: FileText,
+  DIGITAL_CERT_DELETED: FileText,
   SIMULATION_RUN: FileText,
-  PDF_GENERATED: FileText,
+  LOGIN_SUCCESS: KeyRound,
 };
 
 const actionLabels: Record<string, string> = {
   USER_CREATED: "Usuário criado",
   USER_UPDATED: "Usuário atualizado",
+  USER_DISABLED: "Usuário desativado",
+  USER_DELETED: "Usuário excluído",
+  PASSWORD_RESET: "Senha resetada",
   LINK_CREATED: "Link criado",
   LINK_UPDATED: "Link atualizado",
   RULESET_CREATED: "RuleSet criado",
+  RULESET_UPDATED: "RuleSet atualizado",
   RULESET_ACTIVATED: "RuleSet ativado",
+  LEGAL_DOC_UPSERT: "Documento atualizado",
+  LEGAL_DOC_DELETED: "Documento removido",
+  DIGITAL_CERT_UPSERT: "Certificado atualizado",
+  DIGITAL_CERT_DELETED: "Certificado removido",
   SIMULATION_RUN: "Simulação executada",
-  PDF_GENERATED: "PDF gerado",
+  LOGIN_SUCCESS: "Login realizado",
 };
 
-const mockAuditLogs: AuditLog[] = [
-  {
-    id: "log_1",
-    actorUserId: "usr_001",
-    actorName: "Administrador ESCOFER",
-    action: "USER_CREATED",
-    entityType: "User",
-    entityId: "usr_002",
-    metadata: { email: "maria.silva@escofer.com.br" },
-    createdAt: new Date("2024-12-27T10:30:00"),
-  },
-  {
-    id: "log_2",
-    actorUserId: "usr_001",
-    actorName: "Administrador ESCOFER",
-    action: "RULESET_ACTIVATED",
-    entityType: "RuleSet",
-    entityId: "rs_1",
-    metadata: { type: "HONORARIOS", version: 3 },
-    createdAt: new Date("2024-12-26T14:15:00"),
-  },
-  {
-    id: "log_3",
-    actorUserId: "usr_002",
-    actorName: "Maria Silva",
-    action: "SIMULATION_RUN",
-    entityType: "Simulation",
-    entityId: "sim_001",
-    metadata: { type: "HONORARIOS", total: 1850.0 },
-    createdAt: new Date("2024-12-26T11:45:00"),
-  },
-  {
-    id: "log_4",
-    actorUserId: "usr_002",
-    actorName: "Maria Silva",
-    action: "PDF_GENERATED",
-    entityType: "Simulation",
-    entityId: "sim_001",
-    metadata: { type: "HONORARIOS" },
-    createdAt: new Date("2024-12-26T11:46:00"),
-  },
-  {
-    id: "log_5",
-    actorUserId: "usr_001",
-    actorName: "Administrador ESCOFER",
-    action: "LINK_CREATED",
-    entityType: "Link",
-    entityId: "lnk_5",
-    metadata: { title: "Simples Nacional" },
-    createdAt: new Date("2024-12-25T09:20:00"),
-  },
-];
+const pageSize = 15;
 
 export default function AdminAuditoria() {
-  const [logs] = useState<AuditLog[]>(mockAuditLogs);
   const [search, setSearch] = useState("");
   const [actionFilter, setActionFilter] = useState<string>("ALL");
+  const [entityFilter, setEntityFilter] = useState<string>("ALL");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [page, setPage] = useState(1);
+  const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
 
-  const filteredLogs = logs.filter((log) => {
-    const matchesSearch =
-      log.actorName.toLowerCase().includes(search.toLowerCase()) ||
-      log.entityId.toLowerCase().includes(search.toLowerCase());
-    const matchesAction = actionFilter === "ALL" || log.action === actionFilter;
-    
-    let matchesDate = true;
-    if (dateFrom) {
-      matchesDate = matchesDate && log.createdAt >= new Date(dateFrom);
-    }
-    if (dateTo) {
-      matchesDate = matchesDate && log.createdAt <= new Date(dateTo + "T23:59:59");
-    }
-    
-    return matchesSearch && matchesAction && matchesDate;
+  const { data, isLoading } = useQuery({
+    queryKey: ["audit_logs", search, actionFilter, entityFilter, dateFrom, dateTo, page],
+    queryFn: async () => {
+      let query = supabase.from("audit_logs").select("*", { count: "exact" });
+
+      if (search.trim()) {
+        query = query.or(
+          `actor_email.ilike.%${search.trim()}%,entity_id.ilike.%${search.trim()}%`,
+        );
+      }
+      if (actionFilter !== "ALL") {
+        query = query.eq("action", actionFilter);
+      }
+      if (entityFilter !== "ALL") {
+        query = query.eq("entity_type", entityFilter);
+      }
+      if (dateFrom) {
+        query = query.gte("created_at", `${dateFrom}T00:00:00`);
+      }
+      if (dateTo) {
+        query = query.lte("created_at", `${dateTo}T23:59:59`);
+      }
+
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+
+      const { data: rows, error, count } = await query
+        .order("created_at", { ascending: false })
+        .range(from, to);
+
+      if (error) throw error;
+      return { rows: rows as AuditLog[], count: count ?? 0 };
+    },
   });
 
-  const formatDateTime = (date: Date) => {
-    return date.toLocaleString("pt-BR", {
+  const logs = data?.rows ?? [];
+  const totalPages = useMemo(
+    () => Math.max(1, Math.ceil((data?.count ?? 0) / pageSize)),
+    [data?.count],
+  );
+
+  const formatDateTime = (value: string) => {
+    return new Date(value).toLocaleString("pt-BR", {
       day: "2-digit",
       month: "2-digit",
       year: "numeric",
@@ -125,10 +119,6 @@ export default function AdminAuditoria() {
           <h1 className="text-2xl font-bold text-foreground">Auditoria</h1>
           <p className="text-muted-foreground">Histórico de ações na intranet</p>
         </div>
-        <Button variant="outline">
-          <Download className="w-4 h-4 mr-2" />
-          Exportar
-        </Button>
       </div>
 
       <Card>
@@ -156,6 +146,19 @@ export default function AdminAuditoria() {
                       {label}
                     </SelectItem>
                   ))}
+                </SelectContent>
+              </Select>
+              <Select value={entityFilter} onValueChange={setEntityFilter}>
+                <SelectTrigger className="w-48">
+                  <SelectValue placeholder="Entidade" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">Todas as Entidades</SelectItem>
+                  <SelectItem value="profiles">Usuários</SelectItem>
+                  <SelectItem value="app_links">Links</SelectItem>
+                  <SelectItem value="rulesets">RuleSets</SelectItem>
+                  <SelectItem value="legal_docs">Legalização</SelectItem>
+                  <SelectItem value="digital_certs">Certificados</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -194,14 +197,20 @@ export default function AdminAuditoria() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredLogs.length === 0 ? (
+                {isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                      Carregando...
+                    </TableCell>
+                  </TableRow>
+                ) : logs.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
                       Nenhum registro encontrado
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredLogs.map((log) => {
+                  logs.map((log) => {
                     const Icon = actionIcons[log.action] || ClipboardList;
                     return (
                       <motion.tr
@@ -211,14 +220,14 @@ export default function AdminAuditoria() {
                         className="border-b transition-colors hover:bg-muted/50"
                       >
                         <TableCell className="font-mono text-sm text-muted-foreground">
-                          {formatDateTime(log.createdAt)}
+                          {formatDateTime(log.created_at)}
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
                             <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
                               <User className="w-4 h-4 text-primary" />
                             </div>
-                            <span className="font-medium text-sm">{log.actorName}</span>
+                            <span className="font-medium text-sm">{log.actor_email}</span>
                           </div>
                         </TableCell>
                         <TableCell>
@@ -229,17 +238,18 @@ export default function AdminAuditoria() {
                         </TableCell>
                         <TableCell>
                           <span className="text-sm">
-                            {log.entityType}{" "}
-                            <code className="text-xs bg-muted px-1 py-0.5 rounded">
-                              {log.entityId}
-                            </code>
+                            {log.entity_type}{" "}
+                            {log.entity_id && (
+                              <code className="text-xs bg-muted px-1 py-0.5 rounded">
+                                {log.entity_id}
+                              </code>
+                            )}
                           </span>
                         </TableCell>
                         <TableCell>
-                          <code className="text-xs text-muted-foreground">
-                            {JSON.stringify(log.metadata).slice(0, 50)}
-                            {JSON.stringify(log.metadata).length > 50 && "..."}
-                          </code>
+                          <Button variant="ghost" size="sm" onClick={() => setSelectedLog(log)}>
+                            Ver JSON
+                          </Button>
                         </TableCell>
                       </motion.tr>
                     );
@@ -248,13 +258,42 @@ export default function AdminAuditoria() {
               </TableBody>
             </Table>
           </div>
-          
-          <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
-            <p>Mostrando {filteredLogs.length} de {logs.length} registros</p>
-            <p>Logs mantidos por 90 dias</p>
+          <div className="flex items-center justify-between mt-4">
+            <span className="text-sm text-muted-foreground">
+              Página {page} de {totalPages}
+            </span>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page <= 1}
+                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+              >
+                Anterior
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page >= totalPages}
+                onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+              >
+                Próxima
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
+
+      <Dialog open={Boolean(selectedLog)} onOpenChange={() => setSelectedLog(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Metadata</DialogTitle>
+          </DialogHeader>
+          <pre className="rounded-md bg-muted p-4 text-xs overflow-auto">
+{selectedLog ? JSON.stringify(selectedLog.metadata, null, 2) : ""}
+          </pre>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
