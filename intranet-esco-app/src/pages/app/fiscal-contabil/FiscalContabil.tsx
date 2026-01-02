@@ -361,6 +361,7 @@ export default function FiscalContabil() {
           </Card>
         </TabsContent>
       </Tabs>
+
     </div>
   );
 }

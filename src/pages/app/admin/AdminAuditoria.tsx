@@ -56,15 +56,20 @@ export default function AdminAuditoria() {
   const [search, setSearch] = useState("");
   const [actionFilter, setActionFilter] = useState<string>("ALL");
   const [entityFilter, setEntityFilter] = useState<string>("ALL");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(1);
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
+  const retentionStart = useMemo(() => {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 30);
+    return cutoff.toISOString();
+  }, []);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["audit_logs", search, actionFilter, entityFilter, dateFrom, dateTo, page],
+    queryKey: ["audit_logs", search, actionFilter, entityFilter, page],
     queryFn: async () => {
       let query = supabase.from("audit_logs").select("*", { count: "exact" });
+
+      query = query.gte("created_at", retentionStart);
 
       if (search.trim()) {
         query = query.or(
@@ -76,12 +81,6 @@ export default function AdminAuditoria() {
       }
       if (entityFilter !== "ALL") {
         query = query.eq("entity_type", entityFilter);
-      }
-      if (dateFrom) {
-        query = query.gte("created_at", `${dateFrom}T00:00:00`);
-      }
-      if (dateTo) {
-        query = query.lte("created_at", `${dateTo}T23:59:59`);
       }
 
       const from = (page - 1) * pageSize;
@@ -118,6 +117,9 @@ export default function AdminAuditoria() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Auditoria</h1>
           <p className="text-muted-foreground">Histórico de ações na intranet</p>
+          <p className="text-xs text-muted-foreground">
+            Registros ficam disponíveis por 30 dias e são removidos automaticamente.
+          </p>
         </div>
       </div>
 
@@ -161,26 +163,6 @@ export default function AdminAuditoria() {
                   <SelectItem value="digital_certs">Certificados</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-4">
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">De:</span>
-                <Input
-                  type="date"
-                  value={dateFrom}
-                  onChange={(e) => setDateFrom(e.target.value)}
-                  className="w-40"
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">Até:</span>
-                <Input
-                  type="date"
-                  value={dateTo}
-                  onChange={(e) => setDateTo(e.target.value)}
-                  className="w-40"
-                />
-              </div>
             </div>
           </div>
         </CardHeader>

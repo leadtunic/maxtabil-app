@@ -10,11 +10,15 @@ import { AppShell } from "@/components/layout/AppShell";
 import Login from "./pages/Login";
 import Home from "./pages/app/Home";
 import SimuladorHonorarios from "./pages/app/financeiro/SimuladorHonorarios";
-import SimuladorRescisao from "./pages/app/dp/SimuladorRescisao";
-import SimuladorFerias from "./pages/app/dp/SimuladorFerias";
+import FinanceiroWorkspace from "./pages/app/financeiro/Workspace";
+import DepartamentoPessoal from "./pages/app/dp/DepartamentoPessoal";
+import DepartamentoPessoalWorkspace from "./pages/app/dp/Workspace";
 import FiscalContabil from "./pages/app/fiscal-contabil/FiscalContabil";
+import FiscalContabilWorkspace from "./pages/app/fiscal-contabil/Workspace";
 import Legalizacao from "./pages/app/legalizacao/Legalizacao";
+import LegalizacaoWorkspace from "./pages/app/legalizacao/Workspace";
 import CertificadoDigital from "./pages/app/certificado-digital/CertificadoDigital";
+import CertificadoDigitalWorkspace from "./pages/app/certificado-digital/Workspace";
 import AdminUsuarios from "./pages/app/admin/AdminUsuarios";
 import AdminLinks from "./pages/app/admin/AdminLinks";
 import AdminRegras from "./pages/app/admin/AdminRegras";
@@ -43,11 +47,21 @@ const App = () => (
             <Route path="/app" element={<AppShell />}>
               <Route index element={<Home />} />
               <Route path="financeiro/honorarios" element={<SimuladorHonorarios />} />
-              <Route path="dp/rescisao" element={<SimuladorRescisao />} />
-              <Route path="dp/ferias" element={<SimuladorFerias />} />
+              <Route path="financeiro/workspace" element={<FinanceiroWorkspace />} />
+              <Route path="dp" element={<DepartamentoPessoal />} />
+              <Route path="dp/rescisao" element={<DepartamentoPessoal defaultTab="rescisao" />} />
+              <Route path="dp/ferias" element={<DepartamentoPessoal defaultTab="ferias" />} />
+              <Route path="dp/workspace" element={<DepartamentoPessoalWorkspace />} />
               <Route path="fiscal-contabil" element={<FiscalContabil />} />
+              <Route path="fiscal-contabil/workspace" element={<FiscalContabilWorkspace />} />
               <Route path="legalizacao" element={<Legalizacao />} />
-              <Route path="certificado-digital" element={<CertificadoDigital />} />
+              <Route path="legalizacao/workspace" element={<LegalizacaoWorkspace />} />
+              <Route
+                path="certificado-digital"
+                element={<Navigate to="/app/certificado-digital/vencimentos" replace />}
+              />
+              <Route path="certificado-digital/vencimentos" element={<CertificadoDigital />} />
+              <Route path="certificado-digital/workspace" element={<CertificadoDigitalWorkspace />} />
               <Route path="admin/usuarios" element={<AdminUsuarios />} />
               <Route path="admin/links" element={<AdminLinks />} />
               <Route path="admin/regras" element={<AdminRegras />} />

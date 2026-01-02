@@ -53,11 +53,35 @@ serve(async (req) => {
     return new Response("Forbidden", { status: 403, headers: corsHeaders });
   }
 
-  const body = await req.json();
-  const { email, password, display_name, role } = body ?? {};
+  const rawBody = await req.text();
+  let body: Record<string, unknown> = {};
+  if (rawBody) {
+    try {
+      body = JSON.parse(rawBody) as Record<string, unknown>;
+    } catch {
+      return new Response("Invalid JSON body", { status: 400, headers: corsHeaders });
+    }
+  }
 
-  if (!email || !password || !display_name || !role) {
-    return new Response("Missing required fields", { status: 400, headers: corsHeaders });
+  const email = typeof body.email === "string" ? body.email : undefined;
+  const password = typeof body.password === "string" ? body.password : undefined;
+  const displayName =
+    (typeof body.display_name === "string" ? body.display_name : undefined) ??
+    (typeof body.displayName === "string" ? body.displayName : undefined) ??
+    (typeof body.name === "string" ? body.name : undefined);
+  const role = typeof body.role === "string" ? body.role : undefined;
+
+  const missingFields = [];
+  if (!email) missingFields.push("email");
+  if (!password) missingFields.push("password");
+  if (!displayName) missingFields.push("display_name");
+  if (!role) missingFields.push("role");
+
+  if (missingFields.length > 0) {
+    return new Response(JSON.stringify({ error: "Missing required fields", missingFields }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   }
   if (!allowedRoles.includes(role)) {
     return new Response("Invalid role", { status: 400, headers: corsHeaders });
@@ -79,7 +103,7 @@ serve(async (req) => {
   const { error: profileError } = await supabaseAdmin.from("profiles").insert({
     user_id: createdUser.user.id,
     email,
-    display_name,
+    display_name: displayName,
     role,
     is_active: true,
     must_change_password: true,

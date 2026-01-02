@@ -15,19 +15,30 @@ import { Link2, Plus, Search, MoreHorizontal, ExternalLink, GripVertical, Trash2
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
-import type { LinkItem } from "@/types";
+import type { LinkItem, LinkSector } from "@/types";
 
 const categories = ["Sistemas", "Portais", "Documentos", "Ferramentas", "Outros"];
+const sectors: Array<{ value: LinkSector; label: string }> = [
+  { value: "GERAL", label: "Geral" },
+  { value: "FINANCEIRO", label: "Financeiro" },
+  { value: "DP", label: "Departamento Pessoal" },
+  { value: "FISCAL_CONTABIL", label: "Fiscal/Contábil" },
+  { value: "LEGALIZACAO", label: "Legalização" },
+  { value: "CERTIFICADO_DIGITAL", label: "Certificado Digital" },
+  { value: "ADMIN", label: "Administração" },
+];
 
 export default function AdminLinks() {
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("ALL");
+  const [sectorFilter, setSectorFilter] = useState<string>("ALL");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingLink, setEditingLink] = useState<LinkItem | null>(null);
   const [formData, setFormData] = useState({
     title: "",
     url: "",
     category: "Sistemas",
+    sector: "GERAL" as LinkSector,
     is_active: true,
   });
 
@@ -52,14 +63,15 @@ export default function AdminLinks() {
         link.title.toLowerCase().includes(search.toLowerCase()) ||
         link.url.toLowerCase().includes(search.toLowerCase());
       const matchesCategory = categoryFilter === "ALL" || link.category === categoryFilter;
-      return matchesSearch && matchesCategory;
+      const matchesSector = sectorFilter === "ALL" || link.sector === sectorFilter;
+      return matchesSearch && matchesCategory && matchesSector;
     });
-  }, [categoryFilter, links, search]);
+  }, [categoryFilter, links, search, sectorFilter]);
 
   const handleCloseDialog = () => {
     setIsDialogOpen(false);
     setEditingLink(null);
-    setFormData({ title: "", url: "", category: "Sistemas", is_active: true });
+    setFormData({ title: "", url: "", category: "Sistemas", sector: "GERAL", is_active: true });
   };
 
   const handleSaveLink = async () => {
@@ -75,6 +87,7 @@ export default function AdminLinks() {
           title: formData.title,
           url: formData.url,
           category: formData.category,
+          sector: formData.sector,
           is_active: formData.is_active,
         })
         .eq("id", editingLink.id);
@@ -96,6 +109,7 @@ export default function AdminLinks() {
           title: formData.title,
           url: formData.url,
           category: formData.category,
+          sector: formData.sector,
           is_active: formData.is_active,
           sort_order: nextOrder,
         })
@@ -123,6 +137,7 @@ export default function AdminLinks() {
       title: link.title,
       url: link.url,
       category: link.category,
+      sector: link.sector,
       is_active: link.is_active,
     });
     setIsDialogOpen(true);
@@ -216,6 +231,26 @@ export default function AdminLinks() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="sector">Setor</Label>
+              <Select
+                value={formData.sector}
+                onValueChange={(value: LinkSector) =>
+                  setFormData((prev) => ({ ...prev, sector: value }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {sectors.map((sector) => (
+                    <SelectItem key={sector.value} value={sector.value}>
+                      {sector.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="flex items-center justify-between">
               <Label htmlFor="active">Link Ativo</Label>
               <Switch
@@ -261,6 +296,19 @@ export default function AdminLinks() {
                 ))}
               </SelectContent>
             </Select>
+            <Select value={sectorFilter} onValueChange={setSectorFilter}>
+              <SelectTrigger className="w-44">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">Todos setores</SelectItem>
+                {sectors.map((sector) => (
+                  <SelectItem key={sector.value} value={sector.value}>
+                    {sector.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </CardHeader>
         <CardContent>
@@ -271,6 +319,7 @@ export default function AdminLinks() {
                   <TableHead className="w-12"></TableHead>
                   <TableHead>Link</TableHead>
                   <TableHead>Categoria</TableHead>
+                  <TableHead>Setor</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="w-12"></TableHead>
                 </TableRow>
@@ -278,13 +327,13 @@ export default function AdminLinks() {
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                       Carregando...
                     </TableCell>
                   </TableRow>
                 ) : filteredLinks.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                       Nenhum link encontrado
                     </TableCell>
                   </TableRow>
@@ -320,6 +369,12 @@ export default function AdminLinks() {
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline">{link.category}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary">
+                          {sectors.find((sector) => sector.value === link.sector)?.label ??
+                            link.sector}
+                        </Badge>
                       </TableCell>
                       <TableCell>
                         <Badge

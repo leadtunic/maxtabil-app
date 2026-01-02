@@ -28,11 +28,21 @@ export interface AuthUser {
 }
 
 // Links
+export type LinkSector =
+  | "GERAL"
+  | "FINANCEIRO"
+  | "DP"
+  | "FISCAL_CONTABIL"
+  | "LEGALIZACAO"
+  | "CERTIFICADO_DIGITAL"
+  | "ADMIN";
+
 export interface LinkItem {
   id: string;
   title: string;
   url: string;
   category: string;
+  sector: LinkSector;
   is_active: boolean;
   sort_order: number;
   updated_at?: string;

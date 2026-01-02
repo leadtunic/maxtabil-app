@@ -8,7 +8,6 @@ import {
   Settings,
   FileText,
   ClipboardList,
-  CalendarDays,
   Shield,
   ChevronDown,
 } from "lucide-react";
@@ -39,23 +38,27 @@ const mainNav = [
 
 const financeiroNav = [
   { title: "Simulador Honorários", url: "/app/financeiro/honorarios", icon: Calculator },
+  { title: "Workspace", url: "/app/financeiro/workspace", icon: Link2 },
 ];
 
 const dpNav = [
-  { title: "Simulador Rescisão", url: "/app/dp/rescisao", icon: FileText },
-  { title: "Simulador Férias", url: "/app/dp/ferias", icon: CalendarDays },
+  { title: "Simuladores DP", url: "/app/dp", icon: FileText },
+  { title: "Workspace", url: "/app/dp/workspace", icon: Link2 },
 ];
 
 const fiscalNav = [
   { title: "Fator R e DAS", url: "/app/fiscal-contabil", icon: ClipboardList },
+  { title: "Workspace", url: "/app/fiscal-contabil/workspace", icon: Link2 },
 ];
 
 const legalizacaoNav = [
   { title: "Vencimentos", url: "/app/legalizacao", icon: FileText },
+  { title: "Workspace", url: "/app/legalizacao/workspace", icon: Link2 },
 ];
 
 const certDigNav = [
-  { title: "Vencimentos", url: "/app/certificado-digital", icon: Shield },
+  { title: "Vencimentos", url: "/app/certificado-digital/vencimentos", icon: Shield },
+  { title: "Workspace", url: "/app/certificado-digital/workspace", icon: Link2 },
 ];
 
 const adminNav = [

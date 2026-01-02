@@ -3,12 +3,12 @@ import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { motion } from "framer-motion";
 import {
   Calculator,
   FileText,
-  CalendarDays,
   Users,
   Link2,
   Settings,
@@ -17,10 +17,14 @@ import {
   ImagePlus,
   Trash2,
   MessageCircle,
+  ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
 import { FramerCarousel, items as defaultRecadoItems, type CarouselItem } from "@/components/ui/framer-carousel";
 import { useAuthorization } from "@/hooks/use-authorization";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/lib/supabase";
+import type { LinkItem, LinkSector } from "@/types";
 
 const moduleCards = [
   {
@@ -34,22 +38,12 @@ const moduleCards = [
     routeKey: "financeiro",
   },
   {
-    title: "Simulador de Rescisão",
-    description: "Calcule verbas rescisórias para diferentes tipos de desligamento.",
+    title: "Simuladores DP",
+    description: "Rescisão e férias em um único painel com abas.",
     icon: FileText,
-    href: "/app/dp/rescisao",
+    href: "/app/dp",
     color: "bg-info/10 text-info-foreground",
     iconColor: "text-info",
-    category: "DP",
-    routeKey: "dp",
-  },
-  {
-    title: "Simulador de Férias",
-    description: "Calcule valores de férias com ou sem abono pecuniário.",
-    icon: CalendarDays,
-    href: "/app/dp/ferias",
-    color: "bg-success/10 text-success-foreground",
-    iconColor: "text-success",
     category: "DP",
     routeKey: "dp",
   },
@@ -107,6 +101,16 @@ const containerVariants = {
 const itemVariants = {
   hidden: { opacity: 0, y: 20 },
   visible: { opacity: 1, y: 0 },
+};
+
+const sectorLabels: Record<LinkSector, string> = {
+  GERAL: "Geral",
+  FINANCEIRO: "Financeiro",
+  DP: "Departamento Pessoal",
+  FISCAL_CONTABIL: "Fiscal/Contábil",
+  LEGALIZACAO: "Legalização",
+  CERTIFICADO_DIGITAL: "Certificado Digital",
+  ADMIN: "Administração",
 };
 
 export default function Home() {
@@ -211,6 +215,29 @@ export default function Home() {
 
   const visibleModuleCards = moduleCards.filter((card) => canAccess(card.routeKey));
   const visibleAdminCards = adminCards.filter((card) => canAccess(card.routeKey));
+  const { data: linksData } = useQuery({
+    queryKey: ["app_links", "home"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("app_links")
+        .select("*")
+        .order("sort_order", { ascending: true });
+      if (error) throw error;
+      return data as LinkItem[];
+    },
+  });
+
+  const visibleLinks = (linksData ?? []).filter((link) => {
+    if (!link.is_active) return false;
+    if (link.sector === "GERAL") return true;
+    if (link.sector === "ADMIN") return canAccess("admin");
+    if (link.sector === "FINANCEIRO") return canAccess("financeiro");
+    if (link.sector === "DP") return canAccess("dp");
+    if (link.sector === "FISCAL_CONTABIL") return canAccess("fiscal-contabil");
+    if (link.sector === "LEGALIZACAO") return canAccess("legalizacao");
+    if (link.sector === "CERTIFICADO_DIGITAL") return canAccess("certificado-digital");
+    return false;
+  });
 
   return (
     <div className="space-y-8">
@@ -348,6 +375,38 @@ export default function Home() {
           ))}
         </motion.div>
       </section>
+
+      {visibleLinks.length > 0 && (
+        <section>
+          <h2 className="text-lg font-semibold text-foreground mb-4">Links Úteis</h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {visibleLinks.map((link) => (
+              <Button
+                key={link.id}
+                asChild
+                variant="outline"
+                className="h-auto w-full justify-between gap-4 px-4 py-3"
+              >
+                <a href={link.url} target="_blank" rel="noopener noreferrer">
+                  <div className="flex items-center gap-3 text-left">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted">
+                      <Link2 className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium">{link.title}</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="secondary">{sectorLabels[link.sector]}</Badge>
+                        <Badge variant="outline">{link.category}</Badge>
+                      </div>
+                    </div>
+                  </div>
+                  <ExternalLink className="h-4 w-4 text-muted-foreground" />
+                </a>
+              </Button>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Admin Section */}
       <section>
