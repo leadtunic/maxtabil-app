@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import { useActiveRuleSet } from "@/hooks/use-active-ruleset";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,6 +33,9 @@ interface FatorRPayload {
 }
 
 export default function FiscalContabil() {
+  const [searchParams] = useSearchParams();
+  const tabFromUrl = searchParams.get("tab") || "fator-r";
+  
   const [rbt12, setRbt12] = useState("");
   const [folha, setFolha] = useState("");
   const [dasAnnex, setDasAnnex] = useState<SimplesAnnex | "AUTO">("AUTO");
@@ -68,8 +72,8 @@ export default function FiscalContabil() {
   const formatPercent = (value: number) =>
     `${(value * 100).toFixed(2).replace(".", ",")}%`;
 
-  const fatorPayload = (fatorRQuery.data?.payload ?? {}) as FatorRPayload;
-  const simplesPayload = (simplesQuery.data?.payload ?? {}) as SimplesPayload;
+  const fatorPayload = (fatorRQuery.data?.payload ?? {}) as unknown as FatorRPayload;
+  const simplesPayload = (simplesQuery.data?.payload ?? {}) as unknown as SimplesPayload;
 
   const fatorR = useMemo(() => {
     const receita = parseCurrency(rbt12);
@@ -117,8 +121,8 @@ export default function FiscalContabil() {
     const rpa = parseCurrency(compareRpa);
     if (!rbt || !rpa) return null;
 
-    const oldPayload = simplesRuleSets?.find((rs) => rs.id === ruleSetOld)?.payload as SimplesPayload | undefined;
-    const newPayload = simplesRuleSets?.find((rs) => rs.id === ruleSetNew)?.payload as SimplesPayload | undefined;
+    const oldPayload = simplesRuleSets?.find((rs) => rs.id === ruleSetOld)?.payload as unknown as SimplesPayload | undefined;
+    const newPayload = simplesRuleSets?.find((rs) => rs.id === ruleSetNew)?.payload as unknown as SimplesPayload | undefined;
     if (!oldPayload || !newPayload) return null;
 
     const oldCalc = computeSimples(oldPayload, compareAnnex, rbt, rpa);
@@ -141,7 +145,7 @@ export default function FiscalContabil() {
         </p>
       </div>
 
-      <Tabs defaultValue="fator-r">
+      <Tabs defaultValue={tabFromUrl}>
         <TabsList>
           <TabsTrigger value="fator-r">Fator R</TabsTrigger>
           <TabsTrigger value="das">DAS Simples</TabsTrigger>

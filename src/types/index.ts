@@ -45,6 +45,7 @@ export interface LinkItem {
   sector: LinkSector;
   is_active: boolean;
   sort_order: number;
+  clicks?: number; // Optional until migration is applied
   updated_at?: string;
 }
 

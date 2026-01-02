@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SignInCard2 } from "@/components/ui/sign-in-card-2";
-import { Loader2, AlertCircle, Mail, Lock, Eye, EyeOff } from "lucide-react";
+import { Loader2, AlertCircle, Mail, Lock, Eye, EyeOff, ArrowRight } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { z } from "zod";
 
@@ -148,14 +148,22 @@ export default function Login() {
           </div>
         </div>
 
-        <Button type="submit" className="w-full" disabled={isLoading}>
+        <Button 
+          type="submit" 
+          className="w-full gradient-primary hover:opacity-90 transition-opacity shadow-primary text-white font-semibold" 
+          disabled={isLoading}
+          size="lg"
+        >
           {isLoading ? (
             <>
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
               Entrando...
             </>
           ) : (
-            "Entrar"
+            <>
+              Entrar
+              <ArrowRight className="w-4 h-4 ml-2" />
+            </>
           )}
         </Button>
 

@@ -18,15 +18,47 @@ import {
   Trash2,
   MessageCircle,
   ExternalLink,
+  Scale,
+  BarChart3,
 } from "lucide-react";
 import { toast } from "sonner";
 import { FramerCarousel, items as defaultRecadoItems, type CarouselItem } from "@/components/ui/framer-carousel";
 import { useAuthorization } from "@/hooks/use-authorization";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/lib/supabase";
+import { supabase, trackLinkClick } from "@/lib/supabase";
 import type { LinkItem, LinkSector } from "@/types";
 
 const moduleCards = [
+  {
+    title: "Fator R",
+    description: "Calculadora do Fator R para enquadramento no Simples Nacional.",
+    icon: Scale,
+    href: "/app/fiscal-contabil?tab=fator-r",
+    color: "bg-primary/10 text-primary-foreground",
+    iconColor: "text-primary",
+    category: "Fiscal",
+    routeKey: "fiscal-contabil" as const,
+  },
+  {
+    title: "DAS Simples Nacional",
+    description: "Calcule alíquota efetiva e valor estimado do DAS.",
+    icon: Calculator,
+    href: "/app/fiscal-contabil?tab=das",
+    color: "bg-primary/10 text-primary-foreground",
+    iconColor: "text-primary",
+    category: "Fiscal",
+    routeKey: "fiscal-contabil" as const,
+  },
+  {
+    title: "Comparador Simples",
+    description: "Compare dois RuleSets do Simples Nacional.",
+    icon: BarChart3,
+    href: "/app/fiscal-contabil?tab=comparador",
+    color: "bg-primary/10 text-primary-foreground",
+    iconColor: "text-primary",
+    category: "Fiscal",
+    routeKey: "fiscal-contabil" as const,
+  },
   {
     title: "Simulador de Honorários",
     description: "Calcule honorários contábeis baseados no faturamento e regime tributário.",
@@ -35,7 +67,7 @@ const moduleCards = [
     color: "bg-accent/10 text-accent-foreground",
     iconColor: "text-accent",
     category: "Financeiro",
-    routeKey: "financeiro",
+    routeKey: "financeiro" as const,
   },
   {
     title: "Simuladores DP",
@@ -45,7 +77,7 @@ const moduleCards = [
     color: "bg-info/10 text-info-foreground",
     iconColor: "text-info",
     category: "DP",
-    routeKey: "dp",
+    routeKey: "dp" as const,
   },
   {
     title: "CRM",
@@ -55,7 +87,7 @@ const moduleCards = [
     color: "bg-primary/10 text-primary-foreground",
     iconColor: "text-primary",
     category: "CRM",
-    routeKey: "crm",
+    routeKey: "crm" as const,
   },
 ];
 
@@ -65,28 +97,28 @@ const adminCards = [
     description: "Gerenciar usuários e permissões",
     icon: Users,
     href: "/app/admin/usuarios",
-    routeKey: "admin",
+    routeKey: "admin" as const,
   },
   {
     title: "Links",
     description: "Gerenciar links úteis",
     icon: Link2,
     href: "/app/admin/links",
-    routeKey: "admin",
+    routeKey: "admin" as const,
   },
   {
     title: "Regras",
     description: "Gerenciar regras de cálculo",
     icon: Settings,
     href: "/app/admin/regras",
-    routeKey: "admin",
+    routeKey: "admin" as const,
   },
   {
     title: "Auditoria",
     description: "Visualizar logs de auditoria",
     icon: ClipboardList,
     href: "/app/admin/auditoria",
-    routeKey: "admin",
+    routeKey: "admin" as const,
   },
 ];
 
@@ -122,6 +154,10 @@ export default function Home() {
   const maxRecadoImages = 3;
   const maxImageSizeMb = 2;
   const maxImageSizeBytes = maxImageSizeMb * 1024 * 1024;
+
+  // Get first name or email prefix as fallback
+  const displayName = user?.name || user?.email?.split("@")[0] || "Usuário";
+  const firstName = displayName.split(" ")[0];
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -239,6 +275,13 @@ export default function Home() {
     return false;
   });
 
+  const handleLinkClick = async (link: LinkItem) => {
+    if (link.id) {
+      await trackLinkClick(link.id);
+    }
+    window.open(link.url, "_blank", "noopener,noreferrer");
+  };
+
   return (
     <div className="space-y-8">
       {/* Welcome Header */}
@@ -248,26 +291,27 @@ export default function Home() {
         className="space-y-1"
       >
         <h1 className="text-3xl font-bold text-foreground">
-          Olá, {user?.name.split(" ")[0]}!
+          Bem-vindo(a), <span className="gradient-text">{firstName}</span>! 👋
         </h1>
         <p className="text-muted-foreground">
-          Acesse os módulos disponíveis na intranet.
+          Acesse os sistemas e ferramentas disponíveis para o seu departamento.
         </p>
       </motion.div>
 
-      <section className="space-y-4">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-lg font-semibold text-foreground">Recados em Imagem</h2>
-            <p className="text-sm text-muted-foreground">
-              Comunicados visuais para toda a equipe. O carrossel troca automaticamente a cada
-              8 segundos.
-            </p>
-          </div>
-          {isAdmin && (
-            <div className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-              Administrador
+      {(recadoItems.length > 0 || isAdmin) && (
+        <section className="space-y-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold text-foreground">Comunicados Internos</h2>
+              <p className="text-sm text-muted-foreground">
+                Comunicados visuais para toda a equipe. O carrossel troca automaticamente a cada
+                8 segundos.
+              </p>
             </div>
+            {isAdmin && (
+              <div className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+                Administrador
+              </div>
           )}
         </div>
 
@@ -333,10 +377,11 @@ export default function Home() {
           </Card>
         )}
       </section>
+      )}
 
       {/* Modules Section */}
       <section>
-        <h2 className="text-lg font-semibold text-foreground mb-4">Módulos</h2>
+        <h2 className="text-lg font-semibold text-foreground mb-4">Sistemas e Ferramentas</h2>
         <motion.div
           variants={containerVariants}
           initial="hidden"
@@ -381,36 +426,43 @@ export default function Home() {
           <h2 className="text-lg font-semibold text-foreground mb-4">Links Úteis</h2>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {visibleLinks.map((link) => (
-              <Button
+              <a
                 key={link.id}
-                asChild
-                variant="outline"
-                className="h-auto w-full justify-between gap-4 px-4 py-3"
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleLinkClick(link);
+                }}
+                href={link.url}
+                className="group flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-card px-4 py-2.5 transition-all hover:border-primary/40 hover:shadow-md"
               >
-                <a href={link.url} target="_blank" rel="noopener noreferrer">
-                  <div className="flex items-center gap-3 text-left">
-                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted">
-                      <Link2 className="h-4 w-4 text-muted-foreground" />
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium">{link.title}</p>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant="secondary">{sectorLabels[link.sector]}</Badge>
-                        <Badge variant="outline">{link.category}</Badge>
-                      </div>
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-md bg-muted group-hover:bg-primary/10">
+                    <Link2 className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary" />
+                  </div>
+                  <div className="space-y-0.5">
+                    <p className="text-sm font-medium text-foreground">{link.title}</p>
+                    <div className="flex items-center gap-1.5">
+                      <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
+                        {sectorLabels[link.sector]}
+                      </Badge>
+                      {link.clicks !== undefined && link.clicks > 0 && (
+                        <span className="text-[10px] text-muted-foreground">
+                          {link.clicks} {link.clicks === 1 ? "clique" : "cliques"}
+                        </span>
+                      )}
                     </div>
                   </div>
-                  <ExternalLink className="h-4 w-4 text-muted-foreground" />
-                </a>
-              </Button>
+                </div>
+                <ExternalLink className="h-3.5 w-3.5 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+              </a>
             ))}
           </div>
         </section>
       )}
 
-      {/* Admin Section */}
-      <section>
-        <h2 className="text-lg font-semibold text-foreground mb-4">Administração</h2>
+      {visibleAdminCards.length > 0 && (
+        <section>
+          <h2 className="text-lg font-semibold text-foreground mb-4">Painel Administrativo</h2>
         <motion.div
           variants={containerVariants}
           initial="hidden"
@@ -442,14 +494,7 @@ export default function Home() {
           ))}
         </motion.div>
       </section>
-
-      {/* Disclaimer */}
-      <div className="mt-8 p-4 rounded-lg bg-muted/50 border border-border">
-        <p className="text-xs text-muted-foreground text-center">
-          ⚠️ Os valores apresentados nos simuladores são estimados e não substituem o cálculo oficial.
-          Consulte o departamento responsável para valores definitivos.
-        </p>
-      </div>
+      )}
     </div>
   );
 }

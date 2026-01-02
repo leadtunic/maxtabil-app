@@ -17,3 +17,20 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
   },
 });
+
+/**
+ * Increment the click counter for a link
+ */
+export async function trackLinkClick(linkId: string): Promise<void> {
+  try {
+    const { error } = await supabase.rpc('increment_link_clicks', {
+      link_id: linkId
+    });
+    
+    if (error) {
+      console.error('Error tracking link click:', error);
+    }
+  } catch (error) {
+    console.error('Error tracking link click:', error);
+  }
+}
