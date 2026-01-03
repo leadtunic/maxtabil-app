@@ -5,24 +5,25 @@ import { motion, useMotionValue, animate } from "motion/react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 export interface CarouselItem {
-  id: number;
+  id: string;
   url: string;
   title: string;
+  storagePath?: string;
 }
 
 export const items: CarouselItem[] = [
   {
-    id: 1,
+    id: "recado-1",
     url: "https://images.unsplash.com/photo-1471899236350-e3016bf1e69e?q=80&w=1200&auto=format&fit=crop",
     title: "Aviso de Expediente",
   },
   {
-    id: 2,
+    id: "recado-2",
     url: "https://images.unsplash.com/photo-1539552678512-4005a33c64db?q=80&w=1200&auto=format&fit=crop",
     title: "Comunicado Interno",
   },
   {
-    id: 3,
+    id: "recado-3",
     url: "https://images.unsplash.com/photo-1709983966747-58c311fa6976?q=80&w=1200&auto=format&fit=crop",
     title: "Recado do Financeiro",
   },

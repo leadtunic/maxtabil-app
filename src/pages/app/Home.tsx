@@ -1,4 +1,4 @@
-import { useEffect, useState, type ChangeEvent } from "react";
+import { useEffect, type ChangeEvent } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,9 +22,9 @@ import {
   BarChart3,
 } from "lucide-react";
 import { toast } from "sonner";
-import { FramerCarousel, items as defaultRecadoItems, type CarouselItem } from "@/components/ui/framer-carousel";
+import { FramerCarousel, type CarouselItem } from "@/components/ui/framer-carousel";
 import { useAuthorization } from "@/hooks/use-authorization";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase, trackLinkClick } from "@/lib/supabase";
 import type { LinkItem, LinkSector } from "@/types";
 
@@ -145,54 +145,106 @@ const sectorLabels: Record<LinkSector, string> = {
   ADMIN: "Administração",
 };
 
+type HomeRecadoRow = {
+  id: string;
+  title: string;
+  image_path: string;
+  created_at: string;
+};
+
 export default function Home() {
   const { user } = useAuth();
   const { canAccess } = useAuthorization();
-  const [recadoItems, setRecadoItems] = useState<CarouselItem[]>(defaultRecadoItems);
+  const queryClient = useQueryClient();
   const isAdmin = canAccess("admin");
-  const storageKey = "escofer.recados.carousel";
+  const recadoBucket = "home-recados";
   const maxRecadoImages = 3;
   const maxImageSizeMb = 2;
   const maxImageSizeBytes = maxImageSizeMb * 1024 * 1024;
+  const signedUrlExpiresIn = 60 * 60 * 12;
+  const getRecadoFileId = () => {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+    return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  };
 
   // Get first name or email prefix as fallback
   const displayName = user?.name || user?.email?.split("@")[0] || "Usuário";
   const firstName = displayName.split(" ")[0];
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      const stored = window.localStorage.getItem(storageKey);
-      if (!stored) return;
-      const parsed = JSON.parse(stored) as CarouselItem[];
-      if (Array.isArray(parsed)) {
-        setRecadoItems(parsed.slice(0, maxRecadoImages));
-      }
-    } catch {
-      window.localStorage.removeItem(storageKey);
-    }
-  }, [storageKey]);
+  const { data: recadoItems = [], isError: recadosError } = useQuery({
+    queryKey: ["home_recados"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("home_recados")
+        .select("id,title,image_path,created_at")
+        .eq("is_active", true)
+        .order("sort_order", { ascending: true })
+        .order("created_at", { ascending: false })
+        .limit(maxRecadoImages);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      window.localStorage.setItem(
-        storageKey,
-        JSON.stringify(recadoItems.slice(0, maxRecadoImages))
+      if (error) throw error;
+
+      const rows = (data ?? []) as HomeRecadoRow[];
+      if (!rows.length) return [] as CarouselItem[];
+
+      const signedItems = await Promise.all(
+        rows.map(async (row) => {
+          const { data: signedData, error: signedError } = await supabase.storage
+            .from(recadoBucket)
+            .createSignedUrl(row.image_path, signedUrlExpiresIn);
+
+          if (signedError || !signedData?.signedUrl) {
+            throw signedError ?? new Error("Falha ao gerar URL de recado.");
+          }
+
+          return {
+            id: row.id,
+            url: signedData.signedUrl,
+            title: row.title,
+            storagePath: row.image_path,
+          } satisfies CarouselItem;
+        })
       );
-    } catch {
-      window.localStorage.removeItem(storageKey);
-    }
-  }, [recadoItems, storageKey, maxRecadoImages]);
 
-  const handleUploadRecado = (event: ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files ? Array.from(event.target.files) : [];
+      return signedItems;
+    },
+  });
+
+  useEffect(() => {
+    if (recadosError) {
+      toast.error("Não foi possível carregar os recados.");
+    }
+  }, [recadosError]);
+
+  const handleUploadRecado = async (event: ChangeEvent<HTMLInputElement>) => {
+    const input = event.target;
+    const files = input.files ? Array.from(input.files) : [];
     if (!files.length) return;
 
-    const remainingSlots = Math.max(0, maxRecadoImages - recadoItems.length);
+    if (!isAdmin) {
+      toast.error("Você não tem permissão para enviar recados.");
+      input.value = "";
+      return;
+    }
+
+    const { count, error: countError } = await supabase
+      .from("home_recados")
+      .select("id", { count: "exact", head: true })
+      .eq("is_active", true);
+
+    if (countError) {
+      toast.error("Não foi possível validar o limite de recados.");
+      input.value = "";
+      return;
+    }
+
+    const existingCount = count ?? recadoItems.length;
+    const remainingSlots = Math.max(0, maxRecadoImages - existingCount);
     if (!remainingSlots) {
       toast.error(`Limite de ${maxRecadoImages} imagens atingido.`);
-      event.target.value = "";
+      input.value = "";
       return;
     }
 
@@ -207,46 +259,67 @@ export default function Home() {
 
     const filesToProcess = sizeOkFiles.slice(0, remainingSlots);
     if (!filesToProcess.length) {
-      event.target.value = "";
+      input.value = "";
       return;
     }
 
-    const readers = filesToProcess.map(
-      (file, index) =>
-        new Promise<CarouselItem>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => {
-            resolve({
-              id: Date.now() + index,
-              url: reader.result as string,
-              title: file.name || `Recado ${recadoItems.length + index + 1}`,
-            });
-          };
-          reader.onerror = () => reject(new Error("Falha ao ler a imagem."));
-          reader.readAsDataURL(file);
-        })
+    const results = await Promise.allSettled(
+      filesToProcess.map(async (file, index) => {
+        const extension = file.name.split(".").pop()?.toLowerCase() || "jpg";
+        const filePath = `recados/${getRecadoFileId()}.${extension}`;
+        const { error: uploadError } = await supabase.storage
+          .from(recadoBucket)
+          .upload(filePath, file, { cacheControl: "3600", upsert: false });
+
+        if (uploadError) throw uploadError;
+
+        const { error: insertError } = await supabase.from("home_recados").insert({
+          title: file.name || `Recado ${existingCount + index + 1}`,
+          image_path: filePath,
+          created_by: user?.id ?? null,
+        });
+
+        if (insertError) {
+          await supabase.storage.from(recadoBucket).remove([filePath]);
+          throw insertError;
+        }
+      })
     );
 
-    Promise.allSettled(readers).then((results) => {
-      const newItems = results
-        .filter((result): result is PromiseFulfilledResult<CarouselItem> => result.status === "fulfilled")
-        .map((result) => result.value);
+    const successCount = results.filter((result) => result.status === "fulfilled").length;
+    if (successCount) {
+      toast.success(`${successCount} recado(s) adicionado(s).`);
+      await queryClient.invalidateQueries({ queryKey: ["home_recados"] });
+    }
 
-      if (newItems.length) {
-        setRecadoItems((prev) => [...prev, ...newItems].slice(0, maxRecadoImages));
-        toast.success("Recado(s) adicionados.");
-      }
+    if (results.some((result) => result.status === "rejected")) {
+      toast.error("Alguns recados não puderam ser enviados.");
+    }
 
-      if (results.some((result) => result.status === "rejected")) {
-        toast.error("Não foi possível carregar todas as imagens.");
-      }
-    });
-
-    event.target.value = "";
+    input.value = "";
   };
 
-  const handleRemoveRecado = (id: number) => {
-    setRecadoItems((prev) => prev.filter((item) => item.id !== id));
+  const handleRemoveRecado = async (id: string, storagePath?: string) => {
+    if (!isAdmin) {
+      toast.error("Você não tem permissão para remover recados.");
+      return;
+    }
+
+    const { error: deleteError } = await supabase.from("home_recados").delete().eq("id", id);
+    if (deleteError) {
+      toast.error("Não foi possível remover o recado.");
+      return;
+    }
+
+    if (storagePath) {
+      const { error: storageError } = await supabase.storage.from(recadoBucket).remove([storagePath]);
+      if (storageError) {
+        toast.error("Recado removido, mas não foi possível apagar a imagem.");
+      }
+    }
+
+    toast.success("Recado removido.");
+    await queryClient.invalidateQueries({ queryKey: ["home_recados"] });
   };
 
   const visibleModuleCards = moduleCards.filter((card) => canAccess(card.routeKey));
@@ -312,8 +385,8 @@ export default function Home() {
               <div className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
                 Administrador
               </div>
-          )}
-        </div>
+            )}
+          </div>
 
         <Card className="border-border/60">
           <CardContent className="p-0">
@@ -337,11 +410,11 @@ export default function Home() {
                   multiple
                   onChange={handleUploadRecado}
                 />
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <ImagePlus className="h-4 w-4" />
-                JPG/PNG até {maxImageSizeMb}MB. Tamanho recomendado 1200×600.
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <ImagePlus className="h-4 w-4" />
+                  JPG/PNG até {maxImageSizeMb}MB. Tamanho recomendado 1200×600.
+                </div>
               </div>
-            </div>
 
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {recadoItems.map((item) => (
@@ -357,7 +430,7 @@ export default function Home() {
                         size="icon"
                         variant="destructive"
                         className="h-8 w-8"
-                        onClick={() => handleRemoveRecado(item.id)}
+                        onClick={() => void handleRemoveRecado(item.id, item.storagePath)}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
