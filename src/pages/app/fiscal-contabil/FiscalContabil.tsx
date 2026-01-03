@@ -63,14 +63,41 @@ export default function FiscalContabil() {
     },
   });
 
-  const parseCurrency = (value: string) =>
-    parseFloat(value.replace(/[^\d,]/g, "").replace(",", ".")) || 0;
+  const parseCurrency = (value: string) => {
+    const cleaned = value.replace(/[^\d.,-]/g, "");
+    if (!cleaned) return 0;
+    const lastComma = cleaned.lastIndexOf(",");
+    const lastDot = cleaned.lastIndexOf(".");
+
+    if (lastComma > lastDot) {
+      const normalized = cleaned.replace(/\./g, "").replace(",", ".");
+      const parsed = Number(normalized);
+      return Number.isFinite(parsed) ? parsed : 0;
+    }
+
+    const normalized = cleaned.replace(/,/g, "");
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
 
   const formatCurrency = (value: number) =>
-    new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
+    Number.isFinite(value)
+      ? new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value)
+      : "—";
 
   const formatPercent = (value: number) =>
-    `${(value * 100).toFixed(2).replace(".", ",")}%`;
+    Number.isFinite(value) ? `${(value * 100).toFixed(2).replace(".", ",")}%` : "—";
+
+  const handleCurrencyInput = (setter: (value: string) => void, value: string) => {
+    const numericValue = value.replace(/\D/g, "");
+    const formatted = numericValue
+      ? (parseInt(numericValue, 10) / 100).toLocaleString("pt-BR", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })
+      : "";
+    setter(formatted);
+  };
 
   const fatorPayload = (fatorRQuery.data?.payload ?? {}) as unknown as FatorRPayload;
   const simplesPayload = (simplesQuery.data?.payload ?? {}) as unknown as SimplesPayload;
@@ -97,6 +124,10 @@ export default function FiscalContabil() {
 
     const aliquotaEfetiva = (rbt * band.aliquota_nominal - band.deducao) / rbt;
     const das = rpa * aliquotaEfetiva;
+
+    if (!Number.isFinite(aliquotaEfetiva) || !Number.isFinite(das)) {
+      return null;
+    }
 
     return {
       band,
@@ -136,6 +167,16 @@ export default function FiscalContabil() {
     ? compareResult.newCalc.das - compareResult.oldCalc.das
     : 0;
 
+  useEffect(() => {
+    if (!simplesRuleSets?.length) return;
+    if (!ruleSetNew) {
+      setRuleSetNew(simplesRuleSets[0].id);
+    }
+    if (!ruleSetOld) {
+      setRuleSetOld(simplesRuleSets[1]?.id ?? simplesRuleSets[0].id);
+    }
+  }, [ruleSetNew, ruleSetOld, simplesRuleSets]);
+
   return (
     <div className="space-y-6">
       <div className="space-y-1">
@@ -166,11 +207,21 @@ export default function FiscalContabil() {
               <div className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="rbt12">Receita bruta (RBT12)</Label>
-                  <Input id="rbt12" value={rbt12} onChange={(e) => setRbt12(e.target.value)} />
+                  <Input
+                    id="rbt12"
+                    value={rbt12}
+                    onChange={(e) => handleCurrencyInput(setRbt12, e.target.value)}
+                    placeholder="0,00"
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="folha">Folha de pagamento (12 meses)</Label>
-                  <Input id="folha" value={folha} onChange={(e) => setFolha(e.target.value)} />
+                  <Input
+                    id="folha"
+                    value={folha}
+                    onChange={(e) => handleCurrencyInput(setFolha, e.target.value)}
+                    placeholder="0,00"
+                  />
                 </div>
                 {fatorRQuery.data?.isFallback && (
                   <Badge variant="outline">Usando parâmetros padrão (sem RuleSet ativo)</Badge>
@@ -226,11 +277,19 @@ export default function FiscalContabil() {
                 </div>
                 <div className="space-y-2">
                   <Label>RBT12 (12 meses)</Label>
-                  <Input value={dasRbt12} onChange={(e) => setDasRbt12(e.target.value)} />
+                  <Input
+                    value={dasRbt12}
+                    onChange={(e) => handleCurrencyInput(setDasRbt12, e.target.value)}
+                    placeholder="0,00"
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>RPA (mês atual)</Label>
-                  <Input value={dasRpa} onChange={(e) => setDasRpa(e.target.value)} />
+                  <Input
+                    value={dasRpa}
+                    onChange={(e) => handleCurrencyInput(setDasRpa, e.target.value)}
+                    placeholder="0,00"
+                  />
                 </div>
                 {simplesQuery.data?.isFallback && (
                   <Badge variant="outline">Usando tabela padrão (sem RuleSet ativo)</Badge>
@@ -323,11 +382,19 @@ export default function FiscalContabil() {
                 </div>
                 <div className="space-y-2">
                   <Label>RBT12</Label>
-                  <Input value={compareRbt12} onChange={(e) => setCompareRbt12(e.target.value)} />
+                  <Input
+                    value={compareRbt12}
+                    onChange={(e) => handleCurrencyInput(setCompareRbt12, e.target.value)}
+                    placeholder="0,00"
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>RPA</Label>
-                  <Input value={compareRpa} onChange={(e) => setCompareRpa(e.target.value)} />
+                  <Input
+                    value={compareRpa}
+                    onChange={(e) => handleCurrencyInput(setCompareRpa, e.target.value)}
+                    placeholder="0,00"
+                  />
                 </div>
               </div>
               <div className="space-y-4">

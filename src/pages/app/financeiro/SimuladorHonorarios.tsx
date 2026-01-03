@@ -151,7 +151,20 @@ export default function SimuladorHonorarios() {
   };
 
   const parseCurrency = (value: string): number => {
-    return parseFloat(value.replace(/[^\d,]/g, "").replace(",", ".")) || 0;
+    const cleaned = value.replace(/[^\d.,-]/g, "");
+    if (!cleaned) return 0;
+    const lastComma = cleaned.lastIndexOf(",");
+    const lastDot = cleaned.lastIndexOf(".");
+
+    if (lastComma > lastDot) {
+      const normalized = cleaned.replace(/\./g, "").replace(",", ".");
+      const parsed = Number(normalized);
+      return Number.isFinite(parsed) ? parsed : 0;
+    }
+
+    const normalized = cleaned.replace(/,/g, "");
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : 0;
   };
 
   const formatDateTime = (value: Date): string => {
@@ -166,7 +179,7 @@ export default function SimuladorHonorarios() {
   const handleCurrencyInput = (field: keyof FormData, value: string) => {
     const numericValue = value.replace(/\D/g, "");
     const formatted = numericValue
-      ? (parseInt(numericValue) / 100).toLocaleString("pt-BR", {
+      ? (parseInt(numericValue, 10) / 100).toLocaleString("pt-BR", {
           minimumFractionDigits: 2,
           maximumFractionDigits: 2,
         })
