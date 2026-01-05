@@ -99,6 +99,16 @@ export default function FiscalContabil() {
     setter(formatted);
   };
 
+  const coerceNumber = (value: unknown) => {
+    if (typeof value === "number") {
+      return Number.isFinite(value) ? value : 0;
+    }
+    if (typeof value === "string") {
+      return parseCurrency(value);
+    }
+    return 0;
+  };
+
   const fatorPayload = (fatorRQuery.data?.payload ?? {}) as unknown as FatorRPayload;
   const simplesPayload = (simplesQuery.data?.payload ?? {}) as unknown as SimplesPayload;
 
@@ -109,12 +119,19 @@ export default function FiscalContabil() {
     return folhaTotal / receita;
   }, [folha, rbt12]);
 
-  const fatorRStatus = fatorR >= (fatorPayload.threshold ?? 0.28)
+  const fatorRThreshold = coerceNumber(fatorPayload.threshold ?? 0.28);
+  const fatorRStatus = fatorR >= fatorRThreshold
     ? fatorPayload.annex_if_ge ?? "III"
     : fatorPayload.annex_if_lt ?? "V";
 
   const computeSimples = (payload: SimplesPayload, annex: SimplesAnnex, rbt: number, rpa: number) => {
-    const bands = payload.tables?.[annex] ?? [];
+    const rawBands = payload.tables?.[annex] ?? [];
+    const bands = rawBands.map((band) => ({
+      min: coerceNumber(band.min),
+      max: coerceNumber(band.max),
+      aliquota_nominal: coerceNumber(band.aliquota_nominal),
+      deducao: coerceNumber(band.deducao),
+    }));
     const band =
       bands.find((item) => rbt >= item.min && rbt <= item.max) || bands[bands.length - 1];
 
@@ -238,7 +255,7 @@ export default function FiscalContabil() {
                       Enquadrável no Anexo {fatorRStatus}
                     </Badge>
                     <p className="text-xs text-muted-foreground mt-2">
-                      Limite atual: {(fatorPayload.threshold ?? 0.28) * 100}%.
+                      Limite atual: {fatorRThreshold * 100}%.
                     </p>
                   </CardContent>
                 </Card>
