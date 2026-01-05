@@ -373,20 +373,13 @@ export default function Home() {
 
       {(recadoItems.length > 0 || isAdmin) && (
         <section className="space-y-4">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-semibold text-foreground">Comunicados Internos</h2>
-              <p className="text-sm text-muted-foreground">
-                Comunicados visuais para toda a equipe. O carrossel troca automaticamente a cada
-                8 segundos.
-              </p>
-            </div>
-            {isAdmin && (
+          {isAdmin && (
+            <div className="flex justify-end">
               <div className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
                 Administrador
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
         <Card className="border-border/60">
           <CardContent className="p-0">
