@@ -1,6 +1,6 @@
-PROMPT PARA CODEX — ESCOFER INTRANET (BASEADO NO ZIP ATUAL) — MVP SaaS ESCALÁVEL, 100% TIPADO, SEM CRM
+PROMPT PARA CODEX — MAXTABIL (BASEADO NO ZIP ATUAL) — MVP SaaS ESCALÁVEL, 100% TIPADO, SEM CRM
 
-Você está trabalhando no repositório Vite + React + TypeScript que está no ZIP “escofer 2.zip”.
+Você está trabalhando no repositório Vite + React + TypeScript que está no ZIP atual.
 Estrutura observada (pontos relevantes):
 - App principal na raiz com `src/` e `vite.config.ts`.
 - Supabase já existe em `src/lib/supabase.ts` e AuthContext em `src/contexts/AuthContext.tsx`.
@@ -192,7 +192,7 @@ Criar duas Edge Functions novas em `supabase/functions/`:
      Body:
        frequency: "ONE_TIME"
        methods: ["PIX"]
-       products: [{ externalId: "lifetime", name: "Acesso Vitalício ESCOFER Intranet", description: "...", quantity: 1, price: LIFETIME_PRICE_CENTS }]
+       products: [{ externalId: "lifetime", name: "Acesso Vitalício Maxtabil", description: "...", quantity: 1, price: LIFETIME_PRICE_CENTS }]
        returnUrl: `${VITE_APP_BASE_URL}/paywall`
        completionUrl: `${VITE_APP_BASE_URL}/billing/completed`
        customer: { name, email, taxId? } (usar dados disponíveis)
@@ -238,10 +238,10 @@ ETAPA D — AUTH + WORKSPACE CONTEXT + GATES (ONBOARDING/PAYWALL)
 
 2) Login:
    - Em `src/pages/Login.tsx`:
-     - Remover restrição de domínio @escofer.com.br
+     - Rever restrição de domínio de email (se houver)
      - Adicionar botão “Entrar com Google” chamando `supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: ... } })`
      - Manter email+senha (login) e adicionar fluxo mínimo de “criar conta” (signUp) com confirmação (se necessário).
-     - Logo e textos devem ser neutros (produto SaaS), não “intranet corporativa ESCOFER”.
+     - Logo e textos devem ser neutros (produto SaaS), não “intranet corporativa”.
      - Se workspace já tiver logo_path, usar logo do workspace (fallback padrão).
 
 3) Gates:
@@ -348,7 +348,7 @@ ETAPA F — ROTAS E PÁGINAS (CRIAR O QUE NÃO EXISTE)
    - Remover seção CRM
    - Remover “Usuários”
    - Renderizar itens baseado em `hasModule()`
-   - Exibir logo do workspace (signed URL) com fallback em `/logoescof.png`
+   - Exibir logo do workspace (signed URL) com fallback em `/logo.svg`
 
 ====================================================================================================
 ETAPA G — GUIA DE USO (POP-UP)

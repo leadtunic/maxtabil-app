@@ -116,7 +116,7 @@ export function AppSidebar() {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       return `${supabaseUrl}/storage/v1/object/public/workspace-logos/${workspace.logo_path}`;
     }
-    return "/logoescof.png";
+    return "/logo.svg";
   };
 
   return (
@@ -133,7 +133,7 @@ export function AppSidebar() {
               <div className="flex items-center justify-center">
                 <img
                   src={getLogoUrl()}
-                  alt={workspace?.name || "Logo"}
+                  alt={workspace?.name || "Maxtabil"}
                   className="w-[140px] h-auto object-contain max-h-16"
                 />
               </div>

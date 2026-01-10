@@ -205,7 +205,7 @@ export default function AdminUsuarios() {
                 type="email"
                 value={newUser.email}
                 onChange={(e) => setNewUser((prev) => ({ ...prev, email: e.target.value }))}
-                placeholder="email@escofer.com.br"
+                placeholder="email@empresa.com"
               />
             </div>
             <div className="space-y-2">

@@ -10,7 +10,7 @@ import { motion } from "framer-motion";
 import { z } from "zod";
 
 const loginSchema = z.object({
-  email: z.string().email("E-mail inválido").endsWith("@escofer.com.br", "Use seu e-mail corporativo"),
+  email: z.string().email("E-mail inválido"),
   password: z.string().min(6, "Senha deve ter pelo menos 6 caracteres"),
 });
 
@@ -67,8 +67,8 @@ export default function Login() {
           >
             <div className="w-72 h-20 flex items-center justify-center mb-8 mx-auto">
               <img
-                src="/logoescof.png"
-                alt="ESCOFER"
+                src="/logo.svg"
+                alt="Maxtabil"
                 className="w-72 h-20 object-contain"
               />
             </div>
@@ -94,8 +94,8 @@ export default function Login() {
           <div className="lg:hidden text-center mb-8">
             <div className="w-56 h-14 flex items-center justify-center mb-4 mx-auto">
               <img
-                src="/logoescof.png"
-                alt="ESCOFER"
+                src="/logo.svg"
+                alt="Maxtabil"
                 className="w-56 h-14 object-contain"
               />
             </div>
@@ -126,7 +126,7 @@ export default function Login() {
                   <Input
                     id="email"
                     type="email"
-                    placeholder="seu.nome@escofer.com.br"
+                    placeholder="seu.nome@empresa.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     autoComplete="email"
@@ -170,7 +170,7 @@ export default function Login() {
           </Card>
 
           <p className="text-xs text-center text-muted-foreground mt-6">
-            © {new Date().getFullYear()} ESCOFER. Todos os direitos reservados.
+            © {new Date().getFullYear()} Maxtabil. Todos os direitos reservados.
           </p>
         </motion.div>
       </div>

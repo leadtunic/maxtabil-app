@@ -93,7 +93,7 @@ export default function Landing() {
       <header className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-lg border-b">
         <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
-            <img src="/logoescof.png" alt="Logo" className="h-8 w-auto" />
+            <img src="/logo.svg" alt="Maxtabil" className="h-8 w-auto" />
           </Link>
 
           {/* Desktop Nav */}

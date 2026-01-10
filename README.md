@@ -1,7 +1,7 @@
-# ESCOFER Intranet Frontend
+# Maxtabil App
 
 ## Visao geral
-Aplicacao front-end da intranet ESCOFER, feita com Vite + React + TypeScript e
+Aplicacao front-end da plataforma Maxtabil, feita com Vite + React + TypeScript e
 componentes shadcn/ui. O repositorio contem duas apps com estrutura semelhante:
 a app na raiz e a app em `intranet-esco-app/`.
 
@@ -57,7 +57,7 @@ o `port` no `vite.config.ts`.
 
 ## Autenticacao e permissoes
 `src/contexts/AuthContext.tsx` implementa autenticacao mock:
-- Aceita email `@escofer.com.br` e senha com 6+ caracteres.
+- Aceita email valido e senha com 6+ caracteres.
 - `hasRole` libera acesso por role (ADMIN tem acesso total).
 
 ## Simuladores e PDF
@@ -93,4 +93,3 @@ npm run dev
 - `npm run build`: build de producao
 - `npm run preview`: preview do build
 - `npm run lint`: lint do projeto
-# maxtabil-app

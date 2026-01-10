@@ -99,13 +99,13 @@ export function AppSidebar() {
         <div className="flex flex-col items-center gap-2">
           <div className="flex items-center justify-center">
             <img
-              src="/logoEescof.png"
-              alt="ESCOFER"
+              src="/logo.svg"
+              alt="Maxtabil"
               className="w-[140px] h-auto object-contain"
             />
           </div>
           {!collapsed && (
-            <p className="text-xs text-sidebar-foreground/70">Intranet</p>
+            <p className="text-xs text-sidebar-foreground/70">Maxtabil</p>
           )}
         </div>
       </SidebarHeader>

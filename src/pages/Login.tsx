@@ -136,8 +136,8 @@ export default function Login() {
           <CardHeader className="text-center space-y-4">
             <div className="mx-auto">
               <img
-                src="/logoescof.png"
-                alt="Logo"
+                src="/logo.svg"
+                alt="Maxtabil"
                 className="h-12 w-auto object-contain"
               />
             </div>
