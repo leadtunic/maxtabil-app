@@ -1,7 +1,7 @@
 import { Outlet, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { AppSidebar } from "./AppSidebar";
-import { AppTopbar } from "./AppTopbar";
+import { AppSidebar } from "@/components/layout/AppSidebar";
+import { AppTopbar } from "@/components/layout/AppTopbar";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { useAuthorization } from "@/hooks/use-authorization";
 import { getRouteKeyFromPath } from "@/lib/authorization";

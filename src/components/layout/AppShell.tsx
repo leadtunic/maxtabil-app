@@ -1,8 +1,11 @@
 import { Outlet, Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { AppSidebar } from "./AppSidebar";
-import { AppTopbar } from "./AppTopbar";
+import { AppSidebar } from "@/components/layout/AppSidebar";
+import { AppTopbar } from "@/components/layout/AppTopbar";
 import { SidebarProvider } from "@/components/ui/sidebar";
+
+// Set to true to bypass auth checks for development
+const DEV_BYPASS_AUTH = import.meta.env.DEV && import.meta.env.VITE_DEV_BYPASS_AUTH === "true";
 
 export function AppShell() {
   const { isAuthenticated, isLoading, completedOnboarding, hasLifetimeAccess } = useAuth();
@@ -16,18 +19,21 @@ export function AppShell() {
     );
   }
 
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
+  // Allow bypassing auth in development
+  if (!DEV_BYPASS_AUTH) {
+    if (!isAuthenticated) {
+      return <Navigate to="/login" replace />;
+    }
 
-  // Redirect to onboarding if not completed
-  if (!completedOnboarding && location.pathname !== "/onboarding") {
-    return <Navigate to="/onboarding" replace />;
-  }
+    // Redirect to onboarding if not completed
+    if (!completedOnboarding && location.pathname !== "/onboarding") {
+      return <Navigate to="/onboarding" replace />;
+    }
 
-  // Redirect to paywall if onboarding done but not paid
-  if (completedOnboarding && !hasLifetimeAccess && location.pathname !== "/paywall") {
-    return <Navigate to="/paywall" replace />;
+    // Redirect to paywall if onboarding done but not paid
+    if (completedOnboarding && !hasLifetimeAccess && location.pathname !== "/paywall") {
+      return <Navigate to="/paywall" replace />;
+    }
   }
 
   return (
