@@ -7,7 +7,7 @@ import {
   useCallback,
   type ReactNode,
 } from "react";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
 import { logAudit } from "@/lib/audit";
 import { track, identify, AnalyticsEvents, resetAnalytics } from "@/lib/analytics";
 import type {
@@ -15,6 +15,7 @@ import type {
   WorkspaceSettings,
   Entitlement,
   ModuleKey,
+  EnabledModules,
 } from "@/types/supabase";
 import type { User, Session } from "@supabase/supabase-js";
 
@@ -61,27 +62,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchWorkspaceData = useCallback(async (userId: string) => {
     // Try to find existing workspace
-    const { data: existingWs, error: wsError } = await supabase
+    let { data: ws, error: wsError } = await supabase
       .from("workspaces")
       .select("*")
       .eq("owner_user_id", userId)
       .single();
 
-    let ws: Workspace | null = existingWs;
-
     // If no workspace exists, create one
     if (wsError || !ws) {
       const { data: userData } = await supabase.auth.getUser();
       const email = userData?.user?.email || "user@example.com";
-      const displayName = userData?.user?.user_metadata?.name || 
-                          userData?.user?.user_metadata?.full_name || 
-                          email.split("@")[0];
+      const name = userData?.user?.user_metadata?.name || userData?.user?.user_metadata?.full_name || email.split("@")[0];
       
       const { data: newWs, error: createError } = await supabase
         .from("workspaces")
         .insert({
           owner_user_id: userId,
-          name: String(displayName),
+          name: name,
           slug: generateSlug(email),
         })
         .select()
@@ -89,16 +86,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (createError || !newWs) {
         console.error("Error creating workspace:", createError);
-        setIsLoading(false);
         return;
       }
 
-      const workspaceId = newWs.id;
       ws = newWs;
 
       // Create default settings
       await supabase.from("workspace_settings").insert({
-        workspace_id: workspaceId,
+        workspace_id: ws.id,
         enabled_modules: {
           financeiro: true,
           financeiro_bpo: true,
@@ -107,20 +102,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           legalizacao: true,
           certificado_digital: true,
           admin: true,
-        },
+        } as EnabledModules,
         completed_onboarding: false,
       });
 
       // Create entitlement record
       await supabase.from("entitlements").insert({
-        workspace_id: workspaceId,
+        workspace_id: ws.id,
         lifetime_access: false,
       });
-    }
-
-    if (!ws) {
-      setIsLoading(false);
-      return;
     }
 
     setWorkspace(ws);
@@ -164,36 +154,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let mounted = true;
 
     const initAuth = async () => {
-      // If Supabase is not configured, just mark as not loading
-      if (!isSupabaseConfigured) {
-        console.warn("[Auth] Supabase not configured. Running in demo mode.");
-        setIsLoading(false);
-        return;
-      }
-
-      try {
-        const { data: { session: initialSession } } = await supabase.auth.getSession();
-        
-        if (!mounted) return;
-        
-        if (initialSession?.user) {
-          setSession(initialSession);
-          setUser(initialSession.user);
-          await fetchWorkspaceData(initialSession.user.id);
-        }
-      } catch (error) {
-        console.error("[Auth] Error initializing auth:", error);
+      const { data: { session: initialSession } } = await supabase.auth.getSession();
+      
+      if (!mounted) return;
+      
+      if (initialSession?.user) {
+        setSession(initialSession);
+        setUser(initialSession.user);
+        await fetchWorkspaceData(initialSession.user.id);
       }
       
       setIsLoading(false);
     };
 
     initAuth();
-
-    // Don't set up subscription if Supabase not configured
-    if (!isSupabaseConfigured) {
-      return;
-    }
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, newSession) => {
@@ -282,7 +256,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const hasModule = useCallback(
     (moduleKey: ModuleKey): boolean => {
-      if (!settings?.enabled_modules) return true;
+      if (!settings?.enabled_modules) return true; // Default to true if not set
       return settings.enabled_modules[moduleKey] === true;
     },
     [settings]

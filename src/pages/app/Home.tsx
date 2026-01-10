@@ -16,14 +16,14 @@ import {
   ArrowRight,
   ImagePlus,
   Trash2,
-  MessageCircle,
   ExternalLink,
   Scale,
   BarChart3,
+  HelpCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { FramerCarousel, type CarouselItem } from "@/components/ui/framer-carousel";
-import { useAuthorization } from "@/hooks/use-authorization";
+import { GuideDialog, useGuide } from "@/components/GuideDialog";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase, trackLinkClick } from "@/lib/supabase";
 import type { LinkItem, LinkSector } from "@/types";
@@ -80,14 +80,14 @@ const moduleCards = [
     routeKey: "dp" as const,
   },
   {
-    title: "CRM",
-    description: "Acompanhe leads, conversas e pipeline de vendas.",
-    icon: MessageCircle,
-    href: "/app/crm/dashboard",
+    title: "BPO Financeiro",
+    description: "Gerencie clientes e tarefas de BPO financeiro.",
+    icon: BarChart3,
+    href: "/app/financeiro/bpo",
     color: "bg-primary/10 text-primary-foreground",
     iconColor: "text-primary",
-    category: "CRM",
-    routeKey: "crm" as const,
+    category: "Financeiro",
+    routeKey: "financeiro_bpo" as const,
   },
 ];
 
@@ -153,10 +153,10 @@ type HomeRecadoRow = {
 };
 
 export default function Home() {
-  const { user } = useAuth();
-  const { canAccess } = useAuthorization();
+  const { user, hasModule } = useAuth();
   const queryClient = useQueryClient();
-  const isAdmin = canAccess("admin");
+  const { showGuide, openGuide, closeGuide } = useGuide();
+  const isAdmin = hasModule("admin");
   const recadoBucket = "home-recados";
   const maxRecadoImages = 3;
   const maxImageSizeMb = 2;
@@ -170,7 +170,7 @@ export default function Home() {
   };
 
   // Get first name or email prefix as fallback
-  const displayName = user?.name || user?.email?.split("@")[0] || "Usuário";
+  const displayName = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "Usuário";
   const firstName = displayName.split(" ")[0];
 
   const { data: recadoItems = [], isError: recadosError } = useQuery({
@@ -322,8 +322,22 @@ export default function Home() {
     await queryClient.invalidateQueries({ queryKey: ["home_recados"] });
   };
 
-  const visibleModuleCards = moduleCards.filter((card) => canAccess(card.routeKey));
-  const visibleAdminCards = adminCards.filter((card) => canAccess(card.routeKey));
+  // Map module route keys to ModuleKey type
+  const moduleKeyMap: Record<string, Parameters<typeof hasModule>[0]> = {
+    "fiscal-contabil": "fiscal_contabil",
+    "financeiro": "financeiro",
+    "dp": "dp",
+    "financeiro_bpo": "financeiro_bpo",
+    "legalizacao": "legalizacao",
+    "certificado-digital": "certificado_digital",
+    "admin": "admin",
+  };
+
+  const visibleModuleCards = moduleCards.filter((card) => {
+    const moduleKey = moduleKeyMap[card.routeKey];
+    return moduleKey ? hasModule(moduleKey) : false;
+  });
+  const visibleAdminCards = adminCards.filter(() => hasModule("admin"));
   const { data: linksData } = useQuery({
     queryKey: ["app_links", "home"],
     queryFn: async () => {
@@ -339,12 +353,12 @@ export default function Home() {
   const visibleLinks = (linksData ?? []).filter((link) => {
     if (!link.is_active) return false;
     if (link.sector === "GERAL") return true;
-    if (link.sector === "ADMIN") return canAccess("admin");
-    if (link.sector === "FINANCEIRO") return canAccess("financeiro");
-    if (link.sector === "DP") return canAccess("dp");
-    if (link.sector === "FISCAL_CONTABIL") return canAccess("fiscal-contabil");
-    if (link.sector === "LEGALIZACAO") return canAccess("legalizacao");
-    if (link.sector === "CERTIFICADO_DIGITAL") return canAccess("certificado-digital");
+    if (link.sector === "ADMIN") return hasModule("admin");
+    if (link.sector === "FINANCEIRO") return hasModule("financeiro");
+    if (link.sector === "DP") return hasModule("dp");
+    if (link.sector === "FISCAL_CONTABIL") return hasModule("fiscal_contabil");
+    if (link.sector === "LEGALIZACAO") return hasModule("legalizacao");
+    if (link.sector === "CERTIFICADO_DIGITAL") return hasModule("certificado_digital");
     return false;
   });
 
@@ -357,18 +371,28 @@ export default function Home() {
 
   return (
     <div className="space-y-8">
+      {/* Guide Dialog */}
+      <GuideDialog forceOpen={showGuide} onClose={closeGuide} />
+      
       {/* Welcome Header */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
         className="space-y-1"
       >
-        <h1 className="text-3xl font-bold text-foreground">
-          Bem-vindo(a), <span className="gradient-text">{firstName}</span>! 👋
-        </h1>
-        <p className="text-muted-foreground">
-          Acesse os sistemas e ferramentas disponíveis para o seu departamento.
-        </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-foreground">
+              Bem-vindo(a), <span className="gradient-text">{firstName}</span>! 👋
+            </h1>
+            <p className="text-muted-foreground">
+              Acesse os sistemas e ferramentas disponíveis para o seu departamento.
+            </p>
+          </div>
+          <Button variant="ghost" size="icon" onClick={openGuide} title="Ajuda">
+            <HelpCircle className="h-5 w-5" />
+          </Button>
+        </div>
       </motion.div>
 
       {(recadoItems.length > 0 || isAdmin) && (

@@ -1,0 +1,450 @@
+import { useState, useEffect } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/lib/supabase";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Switch } from "@/components/ui/switch";
+import { Skeleton } from "@/components/ui/skeleton";
+import { toast } from "sonner";
+import {
+  Users,
+  Plus,
+  MoreHorizontal,
+  Pencil,
+  Trash2,
+  Search,
+  Building,
+  Loader2,
+} from "lucide-react";
+import { useSearchParams } from "react-router-dom";
+
+interface BpoClient {
+  id: string;
+  workspace_id: string;
+  name: string;
+  document: string | null;
+  contact_name: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
+  notes: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export default function BpoClients() {
+  const { workspace } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  
+  const [clients, setClients] = useState<BpoClient[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingClient, setEditingClient] = useState<BpoClient | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  
+  // Form state
+  const [formData, setFormData] = useState({
+    name: "",
+    document: "",
+    contact_name: "",
+    contact_email: "",
+    contact_phone: "",
+    notes: "",
+    is_active: true,
+  });
+
+  const fetchClients = async () => {
+    if (!workspace) return;
+
+    try {
+      const { data, error } = await supabase
+        .from("bpo_clients")
+        .select("*")
+        .eq("workspace_id", workspace.id)
+        .order("name");
+
+      if (error) throw error;
+      setClients(data || []);
+    } catch (error) {
+      console.error("Error fetching clients:", error);
+      toast.error("Erro ao carregar clientes");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchClients();
+  }, [workspace]);
+
+  useEffect(() => {
+    if (searchParams.get("action") === "new") {
+      openNewDialog();
+      searchParams.delete("action");
+      setSearchParams(searchParams);
+    }
+  }, [searchParams]);
+
+  const openNewDialog = () => {
+    setEditingClient(null);
+    setFormData({
+      name: "",
+      document: "",
+      contact_name: "",
+      contact_email: "",
+      contact_phone: "",
+      notes: "",
+      is_active: true,
+    });
+    setIsDialogOpen(true);
+  };
+
+  const openEditDialog = (client: BpoClient) => {
+    setEditingClient(client);
+    setFormData({
+      name: client.name,
+      document: client.document || "",
+      contact_name: client.contact_name || "",
+      contact_email: client.contact_email || "",
+      contact_phone: client.contact_phone || "",
+      notes: client.notes || "",
+      is_active: client.is_active,
+    });
+    setIsDialogOpen(true);
+  };
+
+  const handleSave = async () => {
+    if (!workspace || !formData.name.trim()) {
+      toast.error("Nome é obrigatório");
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      if (editingClient) {
+        // Update existing
+        const { error } = await supabase
+          .from("bpo_clients")
+          .update({
+            name: formData.name,
+            document: formData.document || null,
+            contact_name: formData.contact_name || null,
+            contact_email: formData.contact_email || null,
+            contact_phone: formData.contact_phone || null,
+            notes: formData.notes || null,
+            is_active: formData.is_active,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", editingClient.id);
+
+        if (error) throw error;
+        toast.success("Cliente atualizado!");
+      } else {
+        // Create new
+        const { error } = await supabase.from("bpo_clients").insert({
+          workspace_id: workspace.id,
+          name: formData.name,
+          document: formData.document || null,
+          contact_name: formData.contact_name || null,
+          contact_email: formData.contact_email || null,
+          contact_phone: formData.contact_phone || null,
+          notes: formData.notes || null,
+          is_active: formData.is_active,
+        });
+
+        if (error) throw error;
+        toast.success("Cliente criado!");
+      }
+
+      setIsDialogOpen(false);
+      fetchClients();
+    } catch (error) {
+      console.error("Save error:", error);
+      toast.error("Erro ao salvar cliente");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDelete = async (client: BpoClient) => {
+    if (!confirm(`Tem certeza que deseja excluir "${client.name}"?`)) return;
+
+    try {
+      const { error } = await supabase
+        .from("bpo_clients")
+        .delete()
+        .eq("id", client.id);
+
+      if (error) throw error;
+      toast.success("Cliente excluído!");
+      fetchClients();
+    } catch (error) {
+      console.error("Delete error:", error);
+      toast.error("Erro ao excluir cliente");
+    }
+  };
+
+  const filteredClients = clients.filter((client) =>
+    client.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    client.document?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    client.contact_name?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-10 w-32" />
+        </div>
+        <Skeleton className="h-[400px]" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-2">
+            <Users className="h-6 w-6" />
+            Clientes BPO
+          </h1>
+          <p className="text-muted-foreground">
+            Gerencie seus clientes de BPO financeiro
+          </p>
+        </div>
+        <Button onClick={openNewDialog}>
+          <Plus className="h-4 w-4 mr-2" />
+          Novo Cliente
+        </Button>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <div className="flex flex-col sm:flex-row justify-between gap-4">
+            <div>
+              <CardTitle>Lista de Clientes</CardTitle>
+              <CardDescription>
+                {filteredClients.length} cliente{filteredClients.length !== 1 ? "s" : ""}
+              </CardDescription>
+            </div>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 w-full sm:w-64"
+              />
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {filteredClients.length === 0 ? (
+            <div className="text-center py-12">
+              <Building className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+              <h3 className="font-semibold mb-2">Nenhum cliente encontrado</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                {searchQuery ? "Tente outra busca" : "Cadastre seu primeiro cliente"}
+              </p>
+              {!searchQuery && (
+                <Button onClick={openNewDialog}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Novo Cliente
+                </Button>
+              )}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nome</TableHead>
+                    <TableHead>CNPJ/CPF</TableHead>
+                    <TableHead>Contato</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="w-12"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredClients.map((client) => (
+                    <TableRow key={client.id}>
+                      <TableCell className="font-medium">{client.name}</TableCell>
+                      <TableCell>{client.document || "-"}</TableCell>
+                      <TableCell>
+                        {client.contact_name || client.contact_email || "-"}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={client.is_active ? "default" : "secondary"}>
+                          {client.is_active ? "Ativo" : "Inativo"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => openEditDialog(client)}>
+                              <Pencil className="h-4 w-4 mr-2" />
+                              Editar
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => handleDelete(client)}
+                              className="text-red-600"
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Excluir
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Dialog for create/edit */}
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {editingClient ? "Editar Cliente" : "Novo Cliente"}
+            </DialogTitle>
+            <DialogDescription>
+              {editingClient
+                ? "Atualize as informações do cliente"
+                : "Preencha os dados do novo cliente"}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">Nome *</Label>
+              <Input
+                id="name"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="Nome do cliente"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="document">CNPJ/CPF</Label>
+              <Input
+                id="document"
+                value={formData.document}
+                onChange={(e) => setFormData({ ...formData, document: e.target.value })}
+                placeholder="00.000.000/0000-00"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="contact_name">Nome do Contato</Label>
+                <Input
+                  id="contact_name"
+                  value={formData.contact_name}
+                  onChange={(e) => setFormData({ ...formData, contact_name: e.target.value })}
+                  placeholder="Nome"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="contact_phone">Telefone</Label>
+                <Input
+                  id="contact_phone"
+                  value={formData.contact_phone}
+                  onChange={(e) => setFormData({ ...formData, contact_phone: e.target.value })}
+                  placeholder="(00) 00000-0000"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="contact_email">E-mail</Label>
+              <Input
+                id="contact_email"
+                type="email"
+                value={formData.contact_email}
+                onChange={(e) => setFormData({ ...formData, contact_email: e.target.value })}
+                placeholder="email@exemplo.com"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="notes">Observações</Label>
+              <Textarea
+                id="notes"
+                value={formData.notes}
+                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                placeholder="Anotações sobre o cliente..."
+                rows={3}
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Switch
+                id="is_active"
+                checked={formData.is_active}
+                onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
+              />
+              <Label htmlFor="is_active">Cliente ativo</Label>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSave} disabled={isSaving}>
+              {isSaving ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Salvando...
+                </>
+              ) : (
+                "Salvar"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

@@ -5,7 +5,8 @@ export async function logAudit(
   entityType: string,
   entityId: string | null,
   metadata: Record<string, unknown> = {},
-) {
+  workspaceId?: string | null,
+): Promise<void> {
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -13,6 +14,7 @@ export async function logAudit(
   if (!user) return;
 
   const { error } = await supabase.from("audit_logs").insert({
+    workspace_id: workspaceId ?? null,
     actor_user_id: user.id,
     actor_email: user.email ?? "",
     action,
