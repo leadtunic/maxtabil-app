@@ -93,3 +93,4 @@ npm run dev
 - `npm run build`: build de producao
 - `npm run preview`: preview do build
 - `npm run lint`: lint do projeto
+# maxtabil-app
