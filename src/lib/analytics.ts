@@ -1,7 +1,12 @@
 import posthog from "posthog-js";
 
-const POSTHOG_KEY = import.meta.env.VITE_POSTHOG_KEY as string | undefined;
-const POSTHOG_HOST = (import.meta.env.VITE_POSTHOG_HOST as string) || "https://app.posthog.com";
+const POSTHOG_KEY =
+  (import.meta.env.VITE_PUBLIC_POSTHOG_KEY as string | undefined) ??
+  (import.meta.env.VITE_POSTHOG_KEY as string | undefined);
+const POSTHOG_HOST =
+  (import.meta.env.VITE_PUBLIC_POSTHOG_HOST as string | undefined) ??
+  (import.meta.env.VITE_POSTHOG_HOST as string | undefined) ??
+  "https://app.posthog.com";
 
 let initialized = false;
 
