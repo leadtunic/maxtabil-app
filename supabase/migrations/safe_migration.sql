@@ -137,6 +137,7 @@ ALTER TABLE public.workspace_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.entitlements ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.bpo_clients ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.bpo_tasks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 
 -- Dropar policies existentes e recriar
 DROP POLICY IF EXISTS "workspace_owner_select" ON public.workspaces;
@@ -180,6 +181,11 @@ CREATE POLICY "bpo_tasks_via_workspace" ON public.bpo_tasks
     workspace_id IN (SELECT id FROM public.workspaces WHERE owner_user_id = auth.uid())
   );
 
+-- Audit logs: evitar policy permissiva
+DROP POLICY IF EXISTS "audit_logs_insert" ON public.audit_logs;
+CREATE POLICY "audit_logs_insert" ON public.audit_logs
+  FOR INSERT WITH CHECK (actor_user_id = auth.uid());
+
 -- =====================================================
 -- STORAGE BUCKETS
 -- =====================================================
@@ -202,6 +208,13 @@ CREATE POLICY "workspace_logos_upload" ON storage.objects
 
 CREATE POLICY "workspace_logos_read" ON storage.objects
   FOR SELECT USING (bucket_id = 'workspace-logos');
+
+-- =====================================================
+-- SECURITY: search_path fix para funcoes
+-- =====================================================
+ALTER FUNCTION public.set_updated_at() SET search_path = public;
+ALTER FUNCTION public.is_admin() SET search_path = public;
+ALTER FUNCTION public.is_legalizacao() SET search_path = public;
 
 -- =====================================================
 -- DONE!
