@@ -5,7 +5,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { motion } from "framer-motion";
 import {
   Calculator,
   FileText,
@@ -121,19 +120,6 @@ const adminCards = [
     routeKey: "admin" as const,
   },
 ];
-
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: { staggerChildren: 0.1 },
-  },
-};
-
-const itemVariants = {
-  hidden: { opacity: 0, y: 20 },
-  visible: { opacity: 1, y: 0 },
-};
 
 const sectorLabels: Record<LinkSector, string> = {
   GERAL: "Geral",
@@ -375,25 +361,21 @@ export default function Home() {
       <GuideDialog forceOpen={showGuide} onClose={closeGuide} />
       
       {/* Welcome Header */}
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="space-y-1"
-      >
+      <div className="animate-fade-in">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">
-              Bem-vindo(a), <span className="gradient-text">{firstName}</span>! 👋
+            <h1 className="text-2xl font-semibold tracking-tight">
+              Bem-vindo, {firstName}
             </h1>
-            <p className="text-muted-foreground">
-              Acesse os sistemas e ferramentas disponíveis para o seu departamento.
+            <p className="text-muted-foreground text-sm mt-1">
+              Acesse os sistemas e ferramentas do seu workspace.
             </p>
           </div>
           <Button variant="ghost" size="icon" onClick={openGuide} title="Ajuda">
             <HelpCircle className="h-5 w-5" />
           </Button>
         </div>
-      </motion.div>
+      </div>
 
       {(recadoItems.length > 0 || isAdmin) && (
         <section className="space-y-4">
@@ -471,44 +453,43 @@ export default function Home() {
 
       {/* Modules Section */}
       <section>
-        <h2 className="text-lg font-semibold text-foreground mb-4">Sistemas e Ferramentas</h2>
-        <motion.div
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-          className="grid gap-4 md:grid-cols-2 lg:grid-cols-3"
-        >
-          {visibleModuleCards.map((card) => (
-            <motion.div key={card.title} variants={itemVariants}>
+        <h2 className="text-lg font-semibold mb-4">Ferramentas</h2>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {visibleModuleCards.map((card, index) => (
+            <div 
+              key={card.title} 
+              className="animate-fade-in"
+              style={{ animationDelay: `${index * 50}ms` }}
+            >
               <Link to={card.href}>
-                <Card className="h-full hover:shadow-lg transition-all duration-200 hover:-translate-y-1 group cursor-pointer border-border/50">
-                  <CardHeader className="pb-3">
+                <Card className="h-full card-elevated transition-standard hover:border-primary/30 group cursor-pointer">
+                  <CardHeader className="p-4 pb-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                      <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
                         {card.category}
                       </span>
-                      <div className={`p-2 rounded-lg ${card.color}`}>
-                        <card.icon className={`w-5 h-5 ${card.iconColor}`} />
+                      <div className="p-2 rounded-md bg-muted">
+                        <card.icon className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-micro" />
                       </div>
                     </div>
-                    <CardTitle className="text-lg group-hover:text-primary transition-colors">
+                    <CardTitle className="text-base mt-2 group-hover:text-primary transition-micro">
                       {card.title}
                     </CardTitle>
-                    <CardDescription className="text-sm">
+                    <CardDescription className="text-sm text-muted-foreground">
                       {card.description}
                     </CardDescription>
                   </CardHeader>
-                  <CardContent className="pt-0">
-                    <div className="flex items-center text-sm font-medium text-primary group-hover:gap-2 transition-all">
+                  <CardContent className="p-4 pt-0">
+                    <div className="flex items-center text-sm font-medium text-primary">
                       Acessar
-                      <ArrowRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
+                      <ArrowRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-micro" />
                     </div>
                   </CardContent>
                 </Card>
               </Link>
-            </motion.div>
+            </div>
           ))}
-        </motion.div>
+        </div>
       </section>
 
       {visibleLinks.length > 0 && (
@@ -543,7 +524,7 @@ export default function Home() {
                     </div>
                   </div>
                 </div>
-                <ExternalLink className="h-3.5 w-3.5 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+                <ExternalLink className="h-3.5 w-3.5 text-muted-foreground transition-micro group-hover:translate-x-0.5" />
               </a>
             ))}
           </div>
@@ -552,38 +533,37 @@ export default function Home() {
 
       {visibleAdminCards.length > 0 && (
         <section>
-          <h2 className="text-lg font-semibold text-foreground mb-4">Painel Administrativo</h2>
-        <motion.div
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-          className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
-        >
-          {visibleAdminCards.map((card) => (
-            <motion.div key={card.title} variants={itemVariants}>
-              <Link to={card.href}>
-                <Card className="hover:shadow-md transition-all duration-200 group cursor-pointer border-border/50 hover:border-primary/20">
-                  <CardContent className="p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-lg bg-muted">
-                        <card.icon className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+          <h2 className="text-lg font-semibold mb-4">Administração</h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {visibleAdminCards.map((card, index) => (
+              <div 
+                key={card.title}
+                className="animate-fade-in"
+                style={{ animationDelay: `${index * 50}ms` }}
+              >
+                <Link to={card.href}>
+                  <Card className="card-elevated transition-standard hover:border-primary/30 group cursor-pointer">
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-md bg-muted">
+                          <card.icon className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-micro" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-sm group-hover:text-primary transition-micro">
+                            {card.title}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {card.description}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-medium text-sm group-hover:text-primary transition-colors">
-                          {card.title}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {card.description}
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            </motion.div>
-          ))}
-        </motion.div>
-      </section>
+                    </CardContent>
+                  </Card>
+                </Link>
+              </div>
+            ))}
+          </div>
+        </section>
       )}
     </div>
   );

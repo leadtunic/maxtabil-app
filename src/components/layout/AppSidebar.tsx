@@ -31,7 +31,6 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { useState } from "react";
-import { BeamsBackground } from "@/components/ui/beams-background";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -120,32 +119,26 @@ export function AppSidebar() {
   };
 
   return (
-    <Sidebar className="border-r border-sidebar-border">
-      <BeamsBackground
-        fit="parent"
-        intensity="medium"
-        className="min-h-0 h-full w-full bg-sidebar"
-        contentClassName="relative z-10 h-full w-full items-start justify-start"
-      >
-        <div className="flex h-full w-full flex-col">
-          <SidebarHeader className="p-4 border-b border-sidebar-border">
-            <div className="flex flex-col items-center gap-2">
-              <div className="flex items-center justify-center">
-                <img
-                  src={getLogoUrl()}
-                  alt={workspace?.name || "Maxtabil"}
-                  className="w-[140px] h-auto object-contain max-h-16"
-                />
-              </div>
-              {!collapsed && workspace?.name && (
-                <p className="text-sm font-semibold text-sidebar-foreground/80 truncate max-w-full">
-                  {workspace.name}
-                </p>
-              )}
+    <Sidebar className="border-r border-sidebar-border bg-sidebar">
+      <div className="flex h-full w-full flex-col">
+        <SidebarHeader className="p-4 border-b border-sidebar-border">
+          <div className="flex flex-col items-center gap-2">
+            <div className="flex items-center justify-center">
+              <img
+                src={getLogoUrl()}
+                alt={workspace?.name || "Maxtabil"}
+                className="w-[140px] h-auto object-contain max-h-16"
+              />
             </div>
-          </SidebarHeader>
+            {!collapsed && workspace?.name && (
+              <p className="text-xs font-medium text-sidebar-foreground/70 truncate max-w-full">
+                {workspace.name}
+              </p>
+            )}
+          </div>
+        </SidebarHeader>
 
-          <SidebarContent className="p-2">
+        <SidebarContent className="p-2 scrollbar-thin">
             {/* Main Navigation */}
             <SidebarGroup>
               <SidebarGroupContent>
@@ -506,7 +499,6 @@ export function AppSidebar() {
             </SidebarGroup>
           </SidebarContent>
         </div>
-      </BeamsBackground>
     </Sidebar>
   );
 }

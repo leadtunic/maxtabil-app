@@ -3,18 +3,18 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { MetricCard, MetricGrid } from "@/components/ui/metric-card";
 import { Link } from "react-router-dom";
 import {
-  BarChart3,
   Users,
   ClipboardList,
   AlertCircle,
   Clock,
   CheckCircle,
   ArrowRight,
+  TrendingUp,
 } from "lucide-react";
 
 interface BpoDashboardStats {
@@ -110,25 +110,23 @@ export default function BpoDashboard() {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <BarChart3 className="h-6 w-6" />
-            BPO Financeiro
-          </h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl font-semibold tracking-tight">BPO Financeiro</h1>
+          <p className="text-sm text-muted-foreground mt-1">
             Visão geral das tarefas e clientes
           </p>
         </div>
         <div className="flex gap-2">
           <Link to="/app/financeiro/bpo/clients">
-            <Button variant="outline">
+            <Button variant="outline" size="sm">
               <Users className="h-4 w-4 mr-2" />
               Clientes
             </Button>
           </Link>
           <Link to="/app/financeiro/bpo/tasks">
-            <Button>
+            <Button size="sm">
               <ClipboardList className="h-4 w-4 mr-2" />
               Tarefas
             </Button>
@@ -136,68 +134,39 @@ export default function BpoDashboard() {
         </div>
       </div>
 
-      {/* Stats cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Clientes Ativos</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats?.activeClients || 0}</div>
-            <p className="text-xs text-muted-foreground">
-              de {stats?.totalClients || 0} clientes
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Tarefas Pendentes</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats?.pendingTasks || 0}</div>
-            <p className="text-xs text-muted-foreground">
-              {stats?.overdueTasks || 0} em atraso
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Concluídas no Mês</CardTitle>
-            <CheckCircle className="h-4 w-4 text-green-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats?.tasksCompletedThisMonth || 0}</div>
-            <p className="text-xs text-muted-foreground">
-              tarefas finalizadas
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Taxa de Conclusão</CardTitle>
-            <BarChart3 className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{completionRate}%</div>
-            <Progress value={completionRate} className="mt-2" />
-          </CardContent>
-        </Card>
-      </div>
+      {/* Stats cards - Using MetricGrid and MetricCard */}
+      <MetricGrid columns={4}>
+        <MetricCard
+          label="Clientes Ativos"
+          value={stats?.activeClients || 0}
+          icon={<Users className="h-4 w-4 text-muted-foreground" />}
+        />
+        <MetricCard
+          label="Tarefas Pendentes"
+          value={stats?.pendingTasks || 0}
+          delta={stats?.overdueTasks ? { value: `${stats.overdueTasks} em atraso`, positive: false } : undefined}
+          icon={<Clock className="h-4 w-4 text-muted-foreground" />}
+        />
+        <MetricCard
+          label="Concluídas no Mês"
+          value={stats?.tasksCompletedThisMonth || 0}
+          icon={<CheckCircle className="h-4 w-4 text-success" />}
+        />
+        <MetricCard
+          label="Taxa de Conclusão"
+          value={`${completionRate}%`}
+          icon={<TrendingUp className="h-4 w-4 text-muted-foreground" />}
+        />
+      </MetricGrid>
 
       {/* Alerts */}
       {stats && stats.overdueTasks > 0 && (
-        <Card className="border-yellow-200 bg-yellow-50">
+        <Card className="border-warning/30 bg-warning/5">
           <CardContent className="flex items-center gap-4 py-4">
-            <AlertCircle className="h-8 w-8 text-yellow-600" />
+            <AlertCircle className="h-6 w-6 text-warning" />
             <div className="flex-1">
-              <h3 className="font-semibold text-yellow-800">Atenção!</h3>
-              <p className="text-sm text-yellow-700">
-                Você tem {stats.overdueTasks} tarefa{stats.overdueTasks > 1 ? "s" : ""} em atraso.
+              <p className="text-sm font-medium">
+                Você tem <span className="font-mono">{stats.overdueTasks}</span> tarefa{stats.overdueTasks > 1 ? "s" : ""} em atraso
               </p>
             </div>
             <Link to="/app/financeiro/bpo/tasks?filter=overdue">

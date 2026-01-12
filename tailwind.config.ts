@@ -14,7 +14,19 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ["IBM Plex Sans", "system-ui", "sans-serif"],
+        sans: ["Inter Variable", "system-ui", "-apple-system", "sans-serif"],
+        mono: ["SF Mono", "Fira Code", "Consolas", "monospace"],
+      },
+      spacing: {
+        // 4px grid system
+        "0.5": "2px",
+        "1": "4px",
+        "2": "8px",
+        "3": "12px",
+        "4": "16px",
+        "6": "24px",
+        "8": "32px",
+        "12": "48px",
       },
       colors: {
         border: "hsl(var(--border))",

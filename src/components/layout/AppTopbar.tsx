@@ -22,61 +22,61 @@ export function AppTopbar() {
     navigate("/login");
   };
 
-  const initials = user?.name
+  const displayName = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "Usuário";
+  const initials = displayName
     .split(" ")
-    .map((n) => n[0])
+    .map((n: string) => n[0])
     .slice(0, 2)
     .join("")
     .toUpperCase();
 
   return (
-    <header className="h-16 border-b border-white/20 glass backdrop-blur-xl px-4 flex items-center justify-between sticky top-0 z-10">
+    <header className="h-14 border-b border-border bg-background px-4 flex items-center justify-between sticky top-0 z-10">
       <div className="flex items-center gap-4">
-        <SidebarTrigger className="text-muted-foreground hover:text-foreground transition-colors" />
+        <SidebarTrigger className="text-muted-foreground hover:text-foreground transition-micro" />
         <div className="hidden md:block">
-          <p className="text-sm text-muted-foreground font-medium">
+          <p className="text-sm text-muted-foreground">
             {new Date().toLocaleDateString("pt-BR", {
               weekday: "long",
-              year: "numeric",
-              month: "long",
               day: "numeric",
+              month: "short",
             })}
           </p>
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" className="relative hover:bg-white/80 transition-all duration-200">
-          <Bell className="w-5 h-5 text-muted-foreground" />
-          <span className="absolute top-1 right-1 w-2 h-2 bg-accent rounded-full animate-pulse" />
+      <div className="flex items-center gap-2">
+        <Button variant="ghost" size="icon" className="relative">
+          <Bell className="w-4 h-4 text-muted-foreground" />
+          <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-primary rounded-full" />
         </Button>
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="flex items-center gap-2 px-2 hover:bg-white/80 transition-all duration-200">
-              <Avatar className="w-8 h-8 ring-2 ring-primary/20">
-                <AvatarFallback className="gradient-primary text-white text-xs font-semibold">
+            <Button variant="ghost" className="flex items-center gap-2 px-2">
+              <Avatar className="w-7 h-7">
+                <AvatarFallback className="bg-primary text-primary-foreground text-xs font-medium">
                   {initials}
                 </AvatarFallback>
               </Avatar>
               <span className="hidden md:block text-sm font-medium">
-                {user?.name}
+                {displayName}
               </span>
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56 glass border-white/20">
+          <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel>
               <div className="flex flex-col space-y-1">
-                <p className="text-sm font-medium">{user?.name}</p>
+                <p className="text-sm font-medium">{displayName}</p>
                 <p className="text-xs text-muted-foreground">{user?.email}</p>
               </div>
             </DropdownMenuLabel>
-            <DropdownMenuSeparator className="bg-border/50" />
+            <DropdownMenuSeparator />
             <DropdownMenuItem className="cursor-pointer">
               <User className="w-4 h-4 mr-2" />
               Meu Perfil
             </DropdownMenuItem>
-            <DropdownMenuSeparator className="bg-border/50" />
+            <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleLogout} className="text-destructive cursor-pointer">
               <LogOut className="w-4 h-4 mr-2" />
               Sair

@@ -6,7 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-route
 import { useEffect } from "react";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AppShell } from "@/components/layout/AppShell";
-import { initPosthog, trackPageview } from "@/lib/analytics";
+import { trackPageview } from "@/lib/analytics";
 
 // Public Pages
 import Landing from "./pages/Landing";
@@ -32,9 +32,6 @@ import AdminAuditoria from "./pages/app/admin/AdminAuditoria";
 import Configuracoes from "./pages/app/Configuracoes";
 
 const queryClient = new QueryClient();
-
-// Initialize PostHog
-initPosthog();
 
 function PageViewTracker() {
   const location = useLocation();
