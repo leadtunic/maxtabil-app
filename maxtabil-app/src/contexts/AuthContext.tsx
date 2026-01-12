@@ -20,6 +20,22 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const initTimeoutMs = 8000;
+
+  const withTimeout = useCallback(async <T,>(promise: Promise<T>, label: string): Promise<T> => {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => {
+        reject(new Error(`[Auth] Timeout while waiting for ${label}`));
+      }, initTimeoutMs);
+    });
+
+    try {
+      return await Promise.race([promise, timeoutPromise]);
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+    }
+  }, [initTimeoutMs]);
 
   const buildAuthUser = useCallback((nextProfile: Profile | null): AuthUser | null => {
     if (!nextProfile) return null;
@@ -69,16 +85,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
-    supabase.auth.getSession().then(({ data }) => {
-      if (!mounted) return;
-      if (data.session?.user?.id) {
-        fetchProfile(data.session.user.id).finally(() => {
-          if (mounted) setIsLoading(false);
-        });
-      } else {
-        setIsLoading(false);
+    const initAuth = async () => {
+      try {
+        const { data } = await withTimeout(supabase.auth.getSession(), "auth session");
+        if (!mounted) return;
+
+        if (data.session?.user?.id) {
+          await withTimeout(fetchProfile(data.session.user.id), "profile data");
+        }
+      } catch (error) {
+        console.error("[Auth] Error initializing auth:", error);
+      } finally {
+        if (mounted) setIsLoading(false);
       }
-    });
+    };
+
+    initAuth();
 
     const {
       data: { subscription },
@@ -115,7 +137,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const logout = useCallback(async () => {
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut({ scope: "local" });
+    } catch (error) {
+      console.error("[Auth] Error during logout:", error);
+    }
     setProfile(null);
   }, []);
 

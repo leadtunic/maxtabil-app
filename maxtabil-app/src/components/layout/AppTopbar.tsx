@@ -22,7 +22,12 @@ export function AppTopbar() {
     navigate("/login");
   };
 
-  const initials = user?.name
+  const handleProfile = () => {
+    navigate("/app/perfil");
+  };
+
+  const displayName = user?.name || "Usuário";
+  const initials = displayName
     .split(" ")
     .map((n) => n[0])
     .slice(0, 2)
@@ -72,12 +77,12 @@ export function AppTopbar() {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
+            <DropdownMenuItem onSelect={handleProfile} className="cursor-pointer">
               <User className="w-4 h-4 mr-2" />
               Meu Perfil
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleLogout} className="text-destructive">
+            <DropdownMenuItem onSelect={handleLogout} className="text-destructive cursor-pointer">
               <LogOut className="w-4 h-4 mr-2" />
               Sair
             </DropdownMenuItem>

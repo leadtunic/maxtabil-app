@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
@@ -44,6 +44,18 @@ export default function Configuracoes() {
   );
   const [isSaving, setIsSaving] = useState(false);
 
+  useEffect(() => {
+    if (workspace?.name) {
+      setWorkspaceName(workspace.name);
+    }
+  }, [workspace?.name]);
+
+  useEffect(() => {
+    if (settings?.enabled_modules) {
+      setEnabledModules(settings.enabled_modules as Record<ModuleKey, boolean>);
+    }
+  }, [settings?.enabled_modules]);
+
   const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -64,7 +76,10 @@ export default function Configuracoes() {
   };
 
   const handleSave = async () => {
-    if (!workspace) return;
+    if (!workspace) {
+      toast.error("Workspace não carregado. Recarregue a página.");
+      return;
+    }
     
     setIsSaving(true);
 
@@ -82,35 +97,45 @@ export default function Configuracoes() {
 
         if (uploadError) {
           console.error("Logo upload error:", uploadError);
-          toast.error("Erro ao enviar logo");
+          toast.error("Erro ao enviar logo", { description: uploadError.message });
         } else {
           logoPath = fileName;
         }
       }
 
       // Update workspace
-      await supabase
+      const { error: workspaceError } = await supabase
         .from("workspaces")
         .update({
           name: workspaceName,
           ...(logoPath && { logo_path: logoPath }),
         })
         .eq("id", workspace.id);
+      if (workspaceError) {
+        throw workspaceError;
+      }
 
       // Update settings
-      await supabase
+      const { error: settingsError } = await supabase
         .from("workspace_settings")
-        .update({
-          enabled_modules: enabledModules,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("workspace_id", workspace.id);
+        .upsert(
+          {
+            workspace_id: workspace.id,
+            enabled_modules: enabledModules,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "workspace_id" },
+        );
+      if (settingsError) {
+        throw settingsError;
+      }
 
       await refreshWorkspace();
       toast.success("Configurações salvas!");
     } catch (error) {
       console.error("Save error:", error);
-      toast.error("Erro ao salvar configurações");
+      const message = error instanceof Error ? error.message : "Erro desconhecido";
+      toast.error("Erro ao salvar configurações", { description: message });
     } finally {
       setIsSaving(false);
     }

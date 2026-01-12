@@ -22,6 +22,10 @@ export function AppTopbar() {
     navigate("/login");
   };
 
+  const handleProfile = () => {
+    navigate("/app/configuracoes");
+  };
+
   const displayName = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "Usuário";
   const initials = displayName
     .split(" ")
@@ -72,12 +76,12 @@ export function AppTopbar() {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="cursor-pointer">
+            <DropdownMenuItem onSelect={handleProfile} className="cursor-pointer">
               <User className="w-4 h-4 mr-2" />
               Meu Perfil
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={handleLogout} className="text-destructive cursor-pointer">
+            <DropdownMenuItem onSelect={handleLogout} className="text-destructive cursor-pointer">
               <LogOut className="w-4 h-4 mr-2" />
               Sair
             </DropdownMenuItem>

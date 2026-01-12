@@ -31,6 +31,7 @@ import AdminLinks from "./pages/app/admin/AdminLinks";
 import AdminRegras from "./pages/app/admin/AdminRegras";
 import AdminAuditoria from "./pages/app/admin/AdminAuditoria";
 import Configuracoes from "./pages/app/Configuracoes";
+import WorkspacePlaceholder from "./pages/app/WorkspacePlaceholder";
 
 const queryClient = new QueryClient();
 
@@ -71,7 +72,7 @@ const App = () => (
               <Route path="financeiro/bpo/tasks" element={<BpoTasks />} />
               <Route
                 path="financeiro/workspace"
-                element={<Navigate to="/app/configuracoes?module=financeiro" replace />}
+                element={<WorkspacePlaceholder title="Workspace Financeiro" moduleKey="financeiro" />}
               />
               
               {/* DP */}
@@ -80,28 +81,28 @@ const App = () => (
               <Route path="dp/ferias" element={<DepartamentoPessoal defaultTab="ferias" />} />
               <Route
                 path="dp/workspace"
-                element={<Navigate to="/app/configuracoes?module=dp" replace />}
+                element={<WorkspacePlaceholder title="Workspace DP" moduleKey="dp" />}
               />
               
               {/* Fiscal/Contábil */}
               <Route path="fiscal-contabil" element={<FiscalContabil />} />
               <Route
                 path="fiscal-contabil/workspace"
-                element={<Navigate to="/app/configuracoes?module=fiscal_contabil" replace />}
+                element={<WorkspacePlaceholder title="Workspace Fiscal/Contábil" moduleKey="fiscal_contabil" />}
               />
               
               {/* Legalização */}
               <Route path="legalizacao" element={<Legalizacao />} />
               <Route
                 path="legalizacao/workspace"
-                element={<Navigate to="/app/configuracoes?module=legalizacao" replace />}
+                element={<WorkspacePlaceholder title="Workspace Legalização" moduleKey="legalizacao" />}
               />
               
               {/* Certificado Digital */}
               <Route path="certificado-digital" element={<CertificadoDigital />} />
               <Route
                 path="certificado-digital/workspace"
-                element={<Navigate to="/app/configuracoes?module=certificado_digital" replace />}
+                element={<WorkspacePlaceholder title="Workspace Certificado Digital" moduleKey="certificado_digital" />}
               />
               
               {/* Admin */}

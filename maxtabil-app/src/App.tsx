@@ -23,6 +23,7 @@ import AdminUsuarios from "./pages/app/admin/AdminUsuarios";
 import AdminLinks from "./pages/app/admin/AdminLinks";
 import AdminRegras from "./pages/app/admin/AdminRegras";
 import AdminAuditoria from "./pages/app/admin/AdminAuditoria";
+import Perfil from "./pages/app/Perfil";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -40,6 +41,7 @@ const App = () => (
             
             <Route path="/app" element={<AppShell />}>
               <Route index element={<Home />} />
+              <Route path="perfil" element={<Perfil />} />
               <Route path="financeiro/honorarios" element={<SimuladorHonorarios />} />
               <Route path="financeiro/workspace" element={<FinanceiroWorkspace />} />
               <Route path="dp" element={<DepartamentoPessoal />} />

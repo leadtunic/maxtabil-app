@@ -58,8 +58,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<WorkspaceSettings | null>(null);
   const [entitlement, setEntitlement] = useState<Entitlement | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const initTimeoutMs = 8000;
+
+  const withTimeout = useCallback(async <T,>(promise: Promise<T>, label: string): Promise<T> => {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => {
+        reject(new Error(`[Auth] Timeout while waiting for ${label}`));
+      }, initTimeoutMs);
+    });
+
+    try {
+      return await Promise.race([promise, timeoutPromise]);
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+    }
+  }, [initTimeoutMs]);
 
   const fetchWorkspaceData = useCallback(async (userId: string) => {
+    try {
     // Try to find existing workspace
     const { data: existingWs, error: wsError } = await supabase
       .from("workspaces")
@@ -153,6 +170,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       workspace_id: ws.id,
       workspace_name: ws.name,
     });
+    } catch (error) {
+      console.error("[Auth] Error loading workspace data:", error);
+    }
   }, []);
 
   const refreshWorkspace = useCallback(async () => {
@@ -167,25 +187,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // If Supabase is not configured, just mark as not loading
       if (!isSupabaseConfigured) {
         console.warn("[Auth] Supabase not configured. Running in demo mode.");
-        setIsLoading(false);
+        if (mounted) setIsLoading(false);
         return;
       }
 
       try {
-        const { data: { session: initialSession } } = await supabase.auth.getSession();
+        const { data: { session: initialSession } } = await withTimeout(
+          supabase.auth.getSession(),
+          "auth session"
+        );
         
         if (!mounted) return;
         
         if (initialSession?.user) {
           setSession(initialSession);
           setUser(initialSession.user);
-          await fetchWorkspaceData(initialSession.user.id);
+          await withTimeout(fetchWorkspaceData(initialSession.user.id), "workspace data");
         }
       } catch (error) {
         console.error("[Auth] Error initializing auth:", error);
+      } finally {
+        if (mounted) setIsLoading(false);
       }
-      
-      setIsLoading(false);
     };
 
     initAuth();
@@ -274,7 +297,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(async () => {
     track(AnalyticsEvents.AUTH_LOGOUT);
     resetAnalytics();
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut({ scope: "local" });
+    } catch (error) {
+      console.error("[Auth] Error during logout:", error);
+    }
+    setSession(null);
+    setUser(null);
     setWorkspace(null);
     setSettings(null);
     setEntitlement(null);
