@@ -138,6 +138,7 @@ ALTER TABLE public.entitlements ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.bpo_clients ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.bpo_tasks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.home_recados ENABLE ROW LEVEL SECURITY;
 
 -- Dropar policies existentes e recriar
 DROP POLICY IF EXISTS "workspace_owner_select" ON public.workspaces;
@@ -180,6 +181,25 @@ CREATE POLICY "bpo_tasks_via_workspace" ON public.bpo_tasks
   FOR ALL USING (
     workspace_id IN (SELECT id FROM public.workspaces WHERE owner_user_id = auth.uid())
   );
+
+-- Home recados policies
+DROP POLICY IF EXISTS "home_recados_select_auth" ON public.home_recados;
+DROP POLICY IF EXISTS "home_recados_admin_insert" ON public.home_recados;
+DROP POLICY IF EXISTS "home_recados_admin_update" ON public.home_recados;
+DROP POLICY IF EXISTS "home_recados_admin_delete" ON public.home_recados;
+
+CREATE POLICY "home_recados_select_auth" ON public.home_recados
+  FOR SELECT USING (is_active = true OR public.is_admin());
+
+CREATE POLICY "home_recados_admin_insert" ON public.home_recados
+  FOR INSERT WITH CHECK (public.is_admin());
+
+CREATE POLICY "home_recados_admin_update" ON public.home_recados
+  FOR UPDATE USING (public.is_admin())
+  WITH CHECK (public.is_admin());
+
+CREATE POLICY "home_recados_admin_delete" ON public.home_recados
+  FOR DELETE USING (public.is_admin());
 
 -- Audit logs: evitar policy permissiva
 DROP POLICY IF EXISTS "audit_logs_insert" ON public.audit_logs;

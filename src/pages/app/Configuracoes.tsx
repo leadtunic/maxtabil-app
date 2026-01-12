@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import { Loader2, Upload, Settings, Building2 } from "lucide-react";
+import { Loader2, Upload, Settings, Building2, Lock } from "lucide-react";
 import type { ModuleKey } from "@/types/supabase";
 
 const AVAILABLE_MODULES: { key: ModuleKey; label: string }[] = [
@@ -27,20 +27,24 @@ export default function Configuracoes() {
   const [searchParams] = useSearchParams();
   const moduleParam = searchParams.get("module") as ModuleKey | null;
   const moduleContext = AVAILABLE_MODULES.find((module) => module.key === moduleParam) ?? null;
+
+  const normalizeEnabledModules = (modules?: Record<ModuleKey, boolean>) => ({
+    financeiro: true,
+    financeiro_bpo: true,
+    dp: true,
+    fiscal_contabil: true,
+    legalizacao: true,
+    certificado_digital: true,
+    admin: true,
+    ...(modules ?? {}),
+    admin: true,
+  });
   
   const [workspaceName, setWorkspaceName] = useState(workspace?.name || "");
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [enabledModules, setEnabledModules] = useState<Record<ModuleKey, boolean>>(
-    (settings?.enabled_modules as Record<ModuleKey, boolean>) || {
-      financeiro: true,
-      financeiro_bpo: true,
-      dp: true,
-      fiscal_contabil: true,
-      legalizacao: true,
-      certificado_digital: true,
-      admin: true,
-    }
+    normalizeEnabledModules(settings?.enabled_modules as Record<ModuleKey, boolean> | undefined)
   );
   const [isSaving, setIsSaving] = useState(false);
 
@@ -52,7 +56,9 @@ export default function Configuracoes() {
 
   useEffect(() => {
     if (settings?.enabled_modules) {
-      setEnabledModules(settings.enabled_modules as Record<ModuleKey, boolean>);
+      setEnabledModules(
+        normalizeEnabledModules(settings.enabled_modules as Record<ModuleKey, boolean>)
+      );
     }
   }, [settings?.enabled_modules]);
 
@@ -69,6 +75,9 @@ export default function Configuracoes() {
   };
 
   const toggleModule = (key: ModuleKey) => {
+    if (key === "admin") {
+      return;
+    }
     setEnabledModules((prev) => ({
       ...prev,
       [key]: !prev[key],
@@ -121,7 +130,7 @@ export default function Configuracoes() {
         .upsert(
           {
             workspace_id: workspace.id,
-            enabled_modules: enabledModules,
+            enabled_modules: normalizeEnabledModules(enabledModules),
             updated_at: new Date().toISOString(),
           },
           { onConflict: "workspace_id" },
@@ -217,23 +226,31 @@ export default function Configuracoes() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {AVAILABLE_MODULES.map((module) => (
+              {AVAILABLE_MODULES.map((module) => {
+                const isAdmin = module.key === "admin";
+                return (
                 <div
                   key={module.key}
-                  className={`flex items-center gap-3 p-2 rounded cursor-pointer transition-colors ${
+                  className={`flex items-center gap-3 p-2 rounded transition-colors ${
                     moduleContext?.key === module.key
                       ? "bg-primary/5 border border-primary/20"
                       : "hover:bg-slate-50"
-                  }`}
-                  onClick={() => toggleModule(module.key)}
+                  } ${isAdmin ? "cursor-not-allowed opacity-80" : "cursor-pointer"}`}
+                  onClick={isAdmin ? undefined : () => toggleModule(module.key)}
                 >
                   <Checkbox
                     checked={enabledModules[module.key]}
-                    onCheckedChange={() => toggleModule(module.key)}
+                    onCheckedChange={isAdmin ? undefined : () => toggleModule(module.key)}
+                    disabled={isAdmin}
                   />
-                  <span>{module.label}</span>
+                  <span className="flex-1">{module.label}</span>
+                  {isAdmin && (
+                    <span className="text-slate-400" title="Administração sempre habilitada">
+                      <Lock className="h-4 w-4" />
+                    </span>
+                  )}
                 </div>
-              ))}
+              )})}
             </div>
           </CardContent>
         </Card>

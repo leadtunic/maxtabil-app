@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { Loader2, Upload, Building2, CheckCircle } from "lucide-react";
+import { Loader2, Upload, Building2, CheckCircle, Lock } from "lucide-react";
 import type { ModuleKey } from "@/types/supabase";
 
 const AVAILABLE_MODULES: { key: ModuleKey; label: string; description: string }[] = [
@@ -41,6 +41,11 @@ export default function Onboarding() {
   });
   const [isLoading, setIsLoading] = useState(false);
 
+  const normalizeEnabledModules = (modules: Record<ModuleKey, boolean>) => ({
+    ...modules,
+    admin: true,
+  });
+
   const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -54,6 +59,9 @@ export default function Onboarding() {
   };
 
   const toggleModule = (key: ModuleKey) => {
+    if (key === "admin") {
+      return;
+    }
     setEnabledModules((prev) => ({
       ...prev,
       [key]: !prev[key],
@@ -61,7 +69,10 @@ export default function Onboarding() {
   };
 
   const handleComplete = async () => {
-    if (!workspace) return;
+    if (!workspace) {
+      toast.error("Workspace não carregado. Recarregue a página.");
+      return;
+    }
     
     setIsLoading(true);
 
@@ -78,34 +89,40 @@ export default function Onboarding() {
           .upload(fileName, logoFile, { upsert: true });
 
         if (uploadError) {
-          console.error("Logo upload error:", uploadError);
-          toast.error("Erro ao enviar logo, mas continuando...");
+          throw uploadError;
         } else {
           logoPath = fileName;
         }
       }
 
       // Update workspace name and logo
-      await supabase
+      const { error: workspaceError } = await supabase
         .from("workspaces")
         .update({
           name: workspaceName,
           ...(logoPath && { logo_path: logoPath }),
         })
         .eq("id", workspace.id);
+      if (workspaceError) {
+        throw workspaceError;
+      }
 
       // Update settings
-      await supabase
+      const normalizedModules = normalizeEnabledModules(enabledModules);
+      const { error: settingsError } = await supabase
         .from("workspace_settings")
-        .update({
-          enabled_modules: enabledModules,
+        .upsert({
+          workspace_id: workspace.id,
+          enabled_modules: normalizedModules,
           completed_onboarding: true,
           updated_at: new Date().toISOString(),
-        })
-        .eq("workspace_id", workspace.id);
+        }, { onConflict: "workspace_id" });
+      if (settingsError) {
+        throw settingsError;
+      }
 
       track(AnalyticsEvents.ONBOARDING_COMPLETED, {
-        modules_enabled: Object.entries(enabledModules)
+        modules_enabled: Object.entries(normalizedModules)
           .filter(([, v]) => v)
           .map(([k]) => k)
           .join(","),
@@ -117,7 +134,8 @@ export default function Onboarding() {
       navigate("/paywall");
     } catch (error) {
       console.error("Onboarding error:", error);
-      toast.error("Erro ao salvar configurações");
+      const message = error instanceof Error ? error.message : "Erro desconhecido";
+      toast.error("Erro ao salvar configurações", { description: message });
     } finally {
       setIsLoading(false);
     }
@@ -194,29 +212,44 @@ export default function Onboarding() {
 
               <div className="space-y-3">
                 {AVAILABLE_MODULES.map((module) => (
-                  <div
-                    key={module.key}
-                    className="flex items-start gap-3 p-3 rounded-lg bg-white/5 hover:bg-white/10 transition-colors cursor-pointer"
-                    onClick={() => toggleModule(module.key)}
-                  >
-                    <Checkbox
-                      checked={enabledModules[module.key]}
-                      onCheckedChange={() => toggleModule(module.key)}
-                      className="mt-0.5"
-                    />
-                    <div className="flex-1">
-                      <p className="font-medium">{module.label}</p>
-                      <p className="text-sm text-white/50">{module.description}</p>
-                    </div>
-                    {enabledModules[module.key] && (
-                      <CheckCircle className="w-5 h-5 text-green-400" />
-                    )}
-                  </div>
-                ))}
+                  {AVAILABLE_MODULES.map((module) => {
+                    const isAdmin = module.key === "admin";
+                    return (
+                      <div
+                        key={module.key}
+                        className={`flex items-start gap-3 p-3 rounded-lg bg-white/5 transition-colors ${
+                          isAdmin ? "cursor-not-allowed opacity-80" : "cursor-pointer hover:bg-white/10"
+                        }`}
+                        onClick={isAdmin ? undefined : () => toggleModule(module.key)}
+                      >
+                        <Checkbox
+                          checked={enabledModules[module.key]}
+                          onCheckedChange={isAdmin ? undefined : () => toggleModule(module.key)}
+                          className="mt-0.5"
+                          disabled={isAdmin}
+                        />
+                        <div className="flex-1">
+                          <p className="font-medium">{module.label}</p>
+                          <p className="text-sm text-white/50">{module.description}</p>
+                        </div>
+                        {isAdmin ? (
+                          <Lock className="w-5 h-5 text-white/40" />
+                        ) : (
+                          enabledModules[module.key] && (
+                            <CheckCircle className="w-5 h-5 text-green-400" />
+                          )
+                        )}
+                      </div>
+                    );
+                  })}
               </div>
 
               <div className="flex gap-3">
-                <Button variant="outline" onClick={() => setStep(1)} className="flex-1">
+                <Button
+                  variant="outline"
+                  onClick={() => setStep(1)}
+                  className="flex-1 border-white/20 bg-transparent text-white hover:bg-white/10 hover:text-white"
+                >
                   Voltar
                 </Button>
                 <Button onClick={handleComplete} disabled={isLoading} className="flex-1">
