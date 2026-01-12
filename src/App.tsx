@@ -26,6 +26,7 @@ import DepartamentoPessoal from "./pages/app/dp/DepartamentoPessoal";
 import FiscalContabil from "./pages/app/fiscal-contabil/FiscalContabil";
 import Legalizacao from "./pages/app/legalizacao/Legalizacao";
 import CertificadoDigital from "./pages/app/certificado-digital/CertificadoDigital";
+import AdminUsuarios from "./pages/app/admin/AdminUsuarios";
 import AdminLinks from "./pages/app/admin/AdminLinks";
 import AdminRegras from "./pages/app/admin/AdminRegras";
 import AdminAuditoria from "./pages/app/admin/AdminAuditoria";
@@ -68,22 +69,43 @@ const App = () => (
               <Route path="financeiro/bpo" element={<BpoDashboard />} />
               <Route path="financeiro/bpo/clients" element={<BpoClients />} />
               <Route path="financeiro/bpo/tasks" element={<BpoTasks />} />
+              <Route
+                path="financeiro/workspace"
+                element={<Navigate to="/app/configuracoes?module=financeiro" replace />}
+              />
               
               {/* DP */}
               <Route path="dp" element={<DepartamentoPessoal />} />
               <Route path="dp/rescisao" element={<DepartamentoPessoal defaultTab="rescisao" />} />
               <Route path="dp/ferias" element={<DepartamentoPessoal defaultTab="ferias" />} />
+              <Route
+                path="dp/workspace"
+                element={<Navigate to="/app/configuracoes?module=dp" replace />}
+              />
               
               {/* Fiscal/Contábil */}
               <Route path="fiscal-contabil" element={<FiscalContabil />} />
+              <Route
+                path="fiscal-contabil/workspace"
+                element={<Navigate to="/app/configuracoes?module=fiscal_contabil" replace />}
+              />
               
               {/* Legalização */}
               <Route path="legalizacao" element={<Legalizacao />} />
+              <Route
+                path="legalizacao/workspace"
+                element={<Navigate to="/app/configuracoes?module=legalizacao" replace />}
+              />
               
               {/* Certificado Digital */}
               <Route path="certificado-digital" element={<CertificadoDigital />} />
+              <Route
+                path="certificado-digital/workspace"
+                element={<Navigate to="/app/configuracoes?module=certificado_digital" replace />}
+              />
               
               {/* Admin */}
+              <Route path="admin/usuarios" element={<AdminUsuarios />} />
               <Route path="admin/links" element={<AdminLinks />} />
               <Route path="admin/regras" element={<AdminRegras />} />
               <Route path="admin/auditoria" element={<AdminAuditoria />} />

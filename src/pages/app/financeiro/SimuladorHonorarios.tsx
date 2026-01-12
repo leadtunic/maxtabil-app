@@ -532,6 +532,7 @@ export default function SimuladorHonorarios() {
         });
 
         entry.faturamentoBase = faturamentoBase;
+        entry.base = honorarioBase;
         entry.percentBase = (honorarioBase / Math.max(faturamentoBase, 1)) * 100;
         return entry;
       })
@@ -556,8 +557,20 @@ export default function SimuladorHonorarios() {
     ? Math.min(100, (result.inputs.faturamento / faturamentoVirada) * 100)
     : 0;
 
-  const sensitivityRevenues = [25000, 30000, 35000, 40000, 50000];
-  const sensitivityEmployees = [1, 3, 5, 10];
+  const baseRevenue = result ? Math.max(result.inputs.faturamento, baseMin) : 0;
+  const baseEmployees = result ? Math.max(result.inputs.numFuncionarios, 0) : 0;
+  const revenueSteps = [0.7, 0.85, 1, 1.15, 1.3];
+  const sensitivityRevenues = result
+    ? revenueSteps.map((multiplier) =>
+        Math.max(0, Math.round((baseRevenue * multiplier) / 100) * 100),
+      )
+    : [];
+  const sensitivityEmployees = result
+    ? (baseEmployees <= 1
+        ? [0, 1, 3, 5]
+        : [baseEmployees - 2, baseEmployees, baseEmployees + 2, baseEmployees + 5]
+      ).map((value) => Math.max(0, Math.round(value)))
+    : [];
   const sensitivityValues = result
     ? sensitivityRevenues.map((revenue) =>
         sensitivityEmployees.map((employees) =>
@@ -955,13 +968,27 @@ export default function SimuladorHonorarios() {
                 <div className="rounded-lg border border-border/60 p-3 text-xs text-muted-foreground">
                   Cada funcionário adicional aumenta {formatCurrency(adicFuncionario)} por mês.
                 </div>
+                <div className="grid gap-3 sm:grid-cols-3 text-xs">
+                  <div className="rounded-lg border border-border/60 p-2">
+                    <p className="text-muted-foreground">Base aplicada</p>
+                    <p className="font-medium">{formatCurrency(honorarioDetails.valorBase)}</p>
+                  </div>
+                  <div className="rounded-lg border border-border/60 p-2">
+                    <p className="text-muted-foreground">Ajuste de segmento</p>
+                    <p className="font-medium">{formatCurrency(honorarioDetails.ajusteSegmento)}</p>
+                  </div>
+                  <div className="rounded-lg border border-border/60 p-2">
+                    <p className="text-muted-foreground">Peso dos funcionários</p>
+                    <p className="font-medium">{formatCurrency(honorarioDetails.valorFuncionarios)}</p>
+                  </div>
+                </div>
               </CardContent>
             </Card>
 
             <Card className="lg:col-span-2">
               <CardHeader>
                 <CardTitle>BI 3 • Sensibilidade (Faturamento × Funcionários)</CardTitle>
-                <CardDescription>Impacto direto na variação do honorário</CardDescription>
+                <CardDescription>Faixas derivadas do cenário atual</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="overflow-x-auto rounded-lg border border-border/60">

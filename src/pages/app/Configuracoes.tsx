@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,9 @@ const AVAILABLE_MODULES: { key: ModuleKey; label: string }[] = [
 
 export default function Configuracoes() {
   const { workspace, settings, refreshWorkspace } = useAuth();
+  const [searchParams] = useSearchParams();
+  const moduleParam = searchParams.get("module") as ModuleKey | null;
+  const moduleContext = AVAILABLE_MODULES.find((module) => module.key === moduleParam) ?? null;
   
   const [workspaceName, setWorkspaceName] = useState(workspace?.name || "");
   const [logoFile, setLogoFile] = useState<File | null>(null);
@@ -122,6 +126,12 @@ export default function Configuracoes() {
         <p className="text-muted-foreground">
           Personalize seu escritório
         </p>
+        {moduleContext && (
+          <div className="mt-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm text-primary">
+            Você está ajustando o workspace do módulo <strong>{moduleContext.label}</strong>.
+            Essas configurações são globais do escritório.
+          </div>
+        )}
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
@@ -185,7 +195,11 @@ export default function Configuracoes() {
               {AVAILABLE_MODULES.map((module) => (
                 <div
                   key={module.key}
-                  className="flex items-center gap-3 p-2 rounded hover:bg-slate-50 cursor-pointer"
+                  className={`flex items-center gap-3 p-2 rounded cursor-pointer transition-colors ${
+                    moduleContext?.key === module.key
+                      ? "bg-primary/5 border border-primary/20"
+                      : "hover:bg-slate-50"
+                  }`}
                   onClick={() => toggleModule(module.key)}
                 >
                   <Checkbox
