@@ -102,6 +102,23 @@ export interface Database {
           updated_at?: string;
         };
       };
+      allowed_emails: {
+        Row: {
+          email: string;
+          is_active: boolean;
+          created_at: string;
+        };
+        Insert: {
+          email: string;
+          is_active?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          email?: string;
+          is_active?: boolean;
+          created_at?: string;
+        };
+      };
       profiles: {
         Row: {
           user_id: string;

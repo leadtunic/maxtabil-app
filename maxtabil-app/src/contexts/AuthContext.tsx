@@ -90,6 +90,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await fetchProfile(user.id);
   }, [fetchProfile]);
 
+  const isEmailAllowed = useCallback(async (email: string): Promise<boolean> => {
+    const normalizedEmail = email.trim().toLowerCase();
+    const { data, error } = await supabase.rpc("is_email_allowed", {
+      email_input: normalizedEmail,
+    });
+    if (error) {
+      console.error("[Auth] allowlist check failed:", error);
+      return false;
+    }
+    return Boolean(data);
+  }, []);
+
   useEffect(() => {
     let mounted = true;
 
@@ -137,6 +149,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(
     async (email: string, password: string) => {
+      const allowed = await isEmailAllowed(email);
+      if (!allowed) {
+        return { success: false, error: "E-mail não autorizado para acesso." };
+      }
+
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error || !data.user) {
         return { success: false, error: error?.message || "Credenciais inválidas" };
@@ -150,7 +167,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await logAudit("LOGIN_SUCCESS", "auth", data.user.id, { email: loadedProfile.email });
       return { success: true };
     },
-    [fetchProfile],
+    [fetchProfile, isEmailAllowed],
   );
 
   const logout = useCallback(async () => {
