@@ -89,14 +89,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchWorkspaceData = useCallback(async (userId: string) => {
     try {
-    // Try to find existing workspace
-    const { data: existingWs, error: wsError } = await supabase
+    // Try to find existing workspace (avoid 406 by returning a list)
+    const { data: existingWsList, error: wsError } = await supabase
       .from("workspaces")
       .select("*")
       .eq("owner_user_id", userId)
-      .single();
+      .limit(1);
 
-    let ws: Workspace | null = existingWs;
+    let ws: Workspace | null = existingWsList?.[0] ?? null;
 
     // If no workspace exists, create one
     if (wsError || !ws) {
@@ -155,26 +155,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setWorkspace(ws);
 
     // Fetch settings
-    const { data: settingsData } = await supabase
+    const { data: settingsList } = await supabase
       .from("workspace_settings")
       .select("*")
       .eq("workspace_id", ws.id)
-      .single();
+      .limit(1);
 
-    if (settingsData) {
-      setSettings(settingsData);
-    }
+    const settingsData = settingsList?.[0] ?? null;
+    if (settingsData) setSettings(settingsData);
 
     // Fetch entitlement
-    const { data: entitlementData } = await supabase
+    const { data: entitlementList } = await supabase
       .from("entitlements")
       .select("*")
       .eq("workspace_id", ws.id)
-      .single();
+      .limit(1);
 
-    if (entitlementData) {
-      setEntitlement(entitlementData);
-    }
+    const entitlementData = entitlementList?.[0] ?? null;
+    if (entitlementData) setEntitlement(entitlementData);
 
     // Identify user in analytics
     identify(userId, {

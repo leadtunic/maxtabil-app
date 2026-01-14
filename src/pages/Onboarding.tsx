@@ -11,23 +11,13 @@ import { AnimatedCard } from "@/components/ui/animated-card";
 import ProceduralGroundBackground from "@/components/ui/animated-pattern-cloud";
 import { toast } from "sonner";
 import { Loader2, Upload, Building2 } from "lucide-react";
-import type { ModuleKey } from "@/types/supabase";
-
-type AuthUser = {
-  id: string;
-  email?: string | null;
-  user_metadata?: { name?: string; full_name?: string };
-};
+import type { ModuleKey, Workspace } from "@/types/supabase";
 
 type SupabaseResponse<T> = {
   data: T | null;
   error: { message: string } | null;
 };
 
-type SupabaseAuthResponse = {
-  data: { user: AuthUser | null };
-  error: { message: string } | null;
-};
 
 const AVAILABLE_MODULES: { key: ModuleKey; label: string; description: string }[] = [
   { key: "financeiro", label: "Financeiro - Honorários", description: "Simulador de honorários contábeis" },
@@ -74,7 +64,7 @@ export default function Onboarding() {
     ...modules,
     admin: true,
   });
-  const requestTimeoutMs = 10000;
+  const requestTimeoutMs = 20000;
 
   const withTimeout = async <T,>(promise: PromiseLike<T>, label: string): Promise<T> => {
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -146,18 +136,16 @@ export default function Onboarding() {
 
         const currentUser = user;
 
-        const { data: existingWs, error: existingWsError } = (await withTimeout(
+        const { data: existingWsList, error: existingWsError } = (await withTimeout(
           supabase
             .from("workspaces")
             .select("*")
             .eq("owner_user_id", currentUser.id)
-            .single(),
+            .limit(1),
           "buscar workspace"
-        )) as SupabaseResponse<{
-          id: string;
-          name: string;
-          logo_path?: string | null;
-        }>;
+        )) as SupabaseResponse<Workspace[]>;
+
+        const existingWs = existingWsList?.[0] ?? null;
 
         if (existingWsError || !existingWs) {
           const email = currentUser.email || "user@example.com";
@@ -177,11 +165,7 @@ export default function Onboarding() {
               .select()
               .single(),
             "criar workspace"
-          )) as SupabaseResponse<{
-            id: string;
-            name: string;
-            logo_path?: string | null;
-          }>;
+          )) as SupabaseResponse<Workspace>;
 
           if (createError || !newWs) {
             throw createError || new Error("Não foi possível criar o workspace.");
@@ -210,18 +194,25 @@ export default function Onboarding() {
 
       // Upload logo if provided
       if (logoFile) {
-        const fileExt = logoFile.name.split(".").pop();
+        const fileExt = logoFile.name.split(".").pop() || "png";
         const fileName = `${ensuredWorkspace.id}/logo.${fileExt}`;
-        
-        const { error: uploadError } = (await withTimeout(
-          supabase.storage.from("workspace-logos").upload(fileName, logoFile, { upsert: true }),
-          "enviar a logo"
-        )) as SupabaseResponse<{ path: string }>;
 
-        if (uploadError) {
-          throw uploadError;
-        } else {
-          logoPath = fileName;
+        try {
+          const { error: uploadError } = (await withTimeout(
+            supabase.storage.from("workspace-logos").upload(fileName, logoFile, { upsert: true }),
+            "enviar a logo"
+          )) as SupabaseResponse<{ path: string }>;
+
+          if (uploadError) {
+            console.error("Logo upload error:", uploadError);
+            toast.error("Erro ao enviar logo", { description: uploadError.message });
+          } else {
+            logoPath = fileName;
+          }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Erro desconhecido";
+          console.error("Logo upload timeout:", error);
+          toast.error("Erro ao enviar logo", { description: message });
         }
       }
 
@@ -235,11 +226,7 @@ export default function Onboarding() {
           })
           .eq("id", ensuredWorkspace.id),
         "atualizar o escritório"
-      )) as SupabaseResponse<{
-        id: string;
-        name: string;
-        logo_path?: string | null;
-      }>;
+      )) as SupabaseResponse<Workspace>;
         
       if (workspaceError) {
         throw workspaceError;
