@@ -46,22 +46,6 @@ export default function Onboarding() {
     ...modules,
     admin: true,
   });
-  const requestTimeoutMs = 10000;
-
-  const withTimeout = async <T,>(promise: Promise<T>, label: string): Promise<T> => {
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      timeoutId = setTimeout(() => {
-        reject(new Error(`Timeout ao ${label}. Tente novamente.`));
-      }, requestTimeoutMs);
-    });
-
-    try {
-      return await Promise.race([promise, timeoutPromise]);
-    } finally {
-      if (timeoutId) clearTimeout(timeoutId);
-    }
-  };
 
   useEffect(() => {
     if (workspace?.name) {
@@ -119,10 +103,9 @@ export default function Onboarding() {
         const fileExt = logoFile.name.split(".").pop();
         const fileName = `${workspace.id}/logo.${fileExt}`;
         
-        const { error: uploadError } = await withTimeout(
-          supabase.storage.from("workspace-logos").upload(fileName, logoFile, { upsert: true }),
-          "enviar a logo"
-        );
+        const { error: uploadError } = await supabase.storage
+          .from("workspace-logos")
+          .upload(fileName, logoFile, { upsert: true });
 
         if (uploadError) {
           throw uploadError;
@@ -132,36 +115,32 @@ export default function Onboarding() {
       }
 
       // Update workspace name and logo
-      const { error: workspaceError } = await withTimeout(
-        supabase
-          .from("workspaces")
-          .update({
-            name: workspaceName,
-            ...(logoPath && { logo_path: logoPath }),
-          })
-          .eq("id", workspace.id),
-        "atualizar o escritório"
-      );
+      const { error: workspaceError } = await supabase
+        .from("workspaces")
+        .update({
+          name: workspaceName,
+          ...(logoPath && { logo_path: logoPath }),
+        })
+        .eq("id", workspace.id);
+        
       if (workspaceError) {
         throw workspaceError;
       }
 
       // Update settings
       const normalizedModules = normalizeEnabledModules(enabledModules);
-      const { error: settingsError } = await withTimeout(
-        supabase
-          .from("workspace_settings")
-          .upsert(
-            {
-              workspace_id: workspace.id,
-              enabled_modules: normalizedModules,
-              completed_onboarding: true,
-              updated_at: new Date().toISOString(),
-            },
-            { onConflict: "workspace_id" }
-          ),
-        "salvar configurações"
-      );
+      const { error: settingsError } = await supabase
+        .from("workspace_settings")
+        .upsert(
+          {
+            workspace_id: workspace.id,
+            enabled_modules: normalizedModules,
+            completed_onboarding: true,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "workspace_id" }
+        );
+        
       if (settingsError) {
         throw settingsError;
       }
@@ -173,7 +152,7 @@ export default function Onboarding() {
           .join(","),
       });
 
-      await withTimeout(refreshWorkspace(), "recarregar o workspace");
+      await refreshWorkspace();
       
       toast.success("Configuração concluída!");
       navigate("/paywall");
