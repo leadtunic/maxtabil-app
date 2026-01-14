@@ -70,22 +70,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<WorkspaceSettings | null>(null);
   const [entitlement, setEntitlement] = useState<Entitlement | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const initTimeoutMs = 8000;
-
-  const withTimeout = useCallback(async <T,>(promise: Promise<T>, label: string): Promise<T> => {
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      timeoutId = setTimeout(() => {
-        reject(new Error(`[Auth] Timeout while waiting for ${label}`));
-      }, initTimeoutMs);
-    });
-
-    try {
-      return await Promise.race([promise, timeoutPromise]);
-    } finally {
-      if (timeoutId) clearTimeout(timeoutId);
-    }
-  }, [initTimeoutMs]);
 
   const fetchWorkspaceData = useCallback(async (userId: string) => {
     try {
@@ -215,14 +199,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       try {
-        const { data: { session: initialSession }, error } = await withTimeout(
-          supabase.auth.getSession(),
-          "auth session"
-        );
+        // Clear any corrupted session data first
+        const storedSession = localStorage.getItem('sb-visjvmdzjucfbroekqvc-auth-token');
+        if (storedSession) {
+          try {
+            JSON.parse(storedSession);
+          } catch {
+            console.warn("[Auth] Corrupted session data, clearing...");
+            localStorage.removeItem('sb-visjvmdzjucfbroekqvc-auth-token');
+          }
+        }
+
+        const { data: { session: initialSession }, error } = await supabase.auth.getSession();
 
         if (!mounted) return;
 
         if (error) {
+          console.warn("[Auth] Session error:", error);
           if (isRefreshTokenError(error)) {
             await supabase.auth.signOut({ scope: "local" });
             setSession(null);
@@ -230,29 +223,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setWorkspace(null);
             setSettings(null);
             setEntitlement(null);
-          } else {
-            console.warn("[Auth] Session error:", error);
           }
         }
 
         if (initialSession?.user) {
           setSession(initialSession);
           setUser(initialSession.user);
-          await withTimeout(fetchWorkspaceData(initialSession.user.id), "workspace data");
+          await fetchWorkspaceData(initialSession.user.id);
         }
       } catch (error) {
         console.error("[Auth] Error initializing auth:", error);
-        if (
-          error instanceof Error &&
-          error.message.includes("Timeout while waiting for auth session")
-        ) {
-          void supabase.auth.signOut({ scope: "local" });
-          setSession(null);
-          setUser(null);
-          setWorkspace(null);
-          setSettings(null);
-          setEntitlement(null);
+        // Clear session on any critical error
+        try {
+          await supabase.auth.signOut({ scope: "local" });
+        } catch {
+          // Ignore signout errors
         }
+        setSession(null);
+        setUser(null);
+        setWorkspace(null);
+        setSettings(null);
+        setEntitlement(null);
       } finally {
         if (mounted) setIsLoading(false);
       }
