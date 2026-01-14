@@ -47,7 +47,13 @@ function generateSlug(email: string): string {
 
 export default function Onboarding() {
   const navigate = useNavigate();
-  const { workspace, refreshWorkspace, isAuthenticated, isLoading: authLoading } = useAuth();
+  const {
+    workspace,
+    refreshWorkspace,
+    isAuthenticated,
+    isLoading: authLoading,
+    user,
+  } = useAuth();
   
   const [step, setStep] = useState(1);
   const [workspaceName, setWorkspaceName] = useState(workspace?.name || "");
@@ -134,20 +140,17 @@ export default function Onboarding() {
     try {
       let activeWorkspace = workspace;
       if (!activeWorkspace) {
-        const userResponse = (await withTimeout(
-          supabase.auth.getUser(),
-          "carregar usuário"
-        )) as SupabaseAuthResponse;
-        const user = userResponse.data?.user;
         if (!user) {
           throw new Error("Sessão inválida. Faça login novamente.");
         }
+
+        const currentUser = user;
 
         const { data: existingWs, error: existingWsError } = (await withTimeout(
           supabase
             .from("workspaces")
             .select("*")
-            .eq("owner_user_id", user.id)
+            .eq("owner_user_id", currentUser.id)
             .single(),
           "buscar workspace"
         )) as SupabaseResponse<{
@@ -157,17 +160,17 @@ export default function Onboarding() {
         }>;
 
         if (existingWsError || !existingWs) {
-          const email = user.email || "user@example.com";
+          const email = currentUser.email || "user@example.com";
           const displayName =
-            user.user_metadata?.name ||
-            user.user_metadata?.full_name ||
+            currentUser.user_metadata?.name ||
+            currentUser.user_metadata?.full_name ||
             email.split("@")[0];
 
           const { data: newWs, error: createError } = (await withTimeout(
             supabase
               .from("workspaces")
               .insert({
-                owner_user_id: user.id,
+                owner_user_id: currentUser.id,
                 name: String(displayName),
                 slug: generateSlug(email),
               })
