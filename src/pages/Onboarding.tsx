@@ -187,7 +187,7 @@ export default function Onboarding() {
   };
 
   return (
-    <div className="min-h-screen relative overflow-hidden flex items-center justify-center p-4 bg-zinc-950">
+    <div className="min-h-screen relative overflow-hidden flex items-center justify-center p-4">
       <ProceduralGroundBackground />
       
       <div className="w-full max-w-2xl">

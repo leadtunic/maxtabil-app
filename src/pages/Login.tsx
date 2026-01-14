@@ -116,7 +116,7 @@ export default function Login() {
 
   if (signUpSuccess) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-zinc-950 p-4 relative">
+      <div className="min-h-screen flex items-center justify-center p-4 relative">
         <ProceduralGroundBackground />
         <AnimatedCard className="w-full max-w-md p-6">
           <div className="text-center text-white">
@@ -141,7 +141,7 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-zinc-950 p-4 relative">
+    <div className="min-h-screen flex items-center justify-center p-4 relative">
       <ProceduralGroundBackground />
       <div className="w-full max-w-md">
         <AnimatedCard className="p-6">

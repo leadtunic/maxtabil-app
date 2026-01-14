@@ -69,7 +69,7 @@ export default function Paywall() {
   if (hasLifetimeAccess) {
     // Already paid - redirect handled by AppShell
     return (
-      <div className="min-h-screen flex items-center justify-center bg-zinc-950 relative">
+      <div className="min-h-screen flex items-center justify-center relative">
         <ProceduralGroundBackground />
         <AnimatedCard className="w-full max-w-md p-6 text-center">
           <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-4">
@@ -86,7 +86,7 @@ export default function Paywall() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4 relative">
+    <div className="min-h-screen flex items-center justify-center p-4 relative">
       <ProceduralGroundBackground />
       <div className="w-full max-w-4xl relative z-10">
         <div className="text-center mb-8">
