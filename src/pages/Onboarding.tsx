@@ -13,6 +13,22 @@ import { toast } from "sonner";
 import { Loader2, Upload, Building2 } from "lucide-react";
 import type { ModuleKey } from "@/types/supabase";
 
+type AuthUser = {
+  id: string;
+  email?: string | null;
+  user_metadata?: { name?: string; full_name?: string };
+};
+
+type SupabaseResponse<T> = {
+  data: T | null;
+  error: { message: string } | null;
+};
+
+type SupabaseAuthResponse = {
+  data: { user: AuthUser | null };
+  error: { message: string } | null;
+};
+
 const AVAILABLE_MODULES: { key: ModuleKey; label: string; description: string }[] = [
   { key: "financeiro", label: "Financeiro - Honorários", description: "Simulador de honorários contábeis" },
   { key: "financeiro_bpo", label: "Financeiro - BPO", description: "Gestão de clientes e tarefas de BPO financeiro" },
@@ -118,22 +134,27 @@ export default function Onboarding() {
     try {
       let activeWorkspace = workspace;
       if (!activeWorkspace) {
-        const { data: { user } } = await withTimeout(
+        const userResponse = (await withTimeout(
           supabase.auth.getUser(),
           "carregar usuário"
-        );
+        )) as SupabaseAuthResponse;
+        const user = userResponse.data?.user;
         if (!user) {
           throw new Error("Sessão inválida. Faça login novamente.");
         }
 
-        const { data: existingWs, error: existingWsError } = await withTimeout(
+        const { data: existingWs, error: existingWsError } = (await withTimeout(
           supabase
             .from("workspaces")
             .select("*")
             .eq("owner_user_id", user.id)
             .single(),
           "buscar workspace"
-        );
+        )) as SupabaseResponse<{
+          id: string;
+          name: string;
+          logo_path?: string | null;
+        }>;
 
         if (existingWsError || !existingWs) {
           const email = user.email || "user@example.com";
@@ -142,7 +163,7 @@ export default function Onboarding() {
             user.user_metadata?.full_name ||
             email.split("@")[0];
 
-          const { data: newWs, error: createError } = await withTimeout(
+          const { data: newWs, error: createError } = (await withTimeout(
             supabase
               .from("workspaces")
               .insert({
@@ -153,7 +174,11 @@ export default function Onboarding() {
               .select()
               .single(),
             "criar workspace"
-          );
+          )) as SupabaseResponse<{
+            id: string;
+            name: string;
+            logo_path?: string | null;
+          }>;
 
           if (createError || !newWs) {
             throw createError || new Error("Não foi possível criar o workspace.");
@@ -185,10 +210,10 @@ export default function Onboarding() {
         const fileExt = logoFile.name.split(".").pop();
         const fileName = `${ensuredWorkspace.id}/logo.${fileExt}`;
         
-        const { error: uploadError } = await withTimeout(
+        const { error: uploadError } = (await withTimeout(
           supabase.storage.from("workspace-logos").upload(fileName, logoFile, { upsert: true }),
           "enviar a logo"
-        );
+        )) as SupabaseResponse<{ path: string }>;
 
         if (uploadError) {
           throw uploadError;
@@ -198,7 +223,7 @@ export default function Onboarding() {
       }
 
       // Update workspace name and logo
-      const { error: workspaceError } = await withTimeout(
+      const { error: workspaceError } = (await withTimeout(
         supabase
           .from("workspaces")
           .update({
@@ -207,7 +232,11 @@ export default function Onboarding() {
           })
           .eq("id", ensuredWorkspace.id),
         "atualizar o escritório"
-      );
+      )) as SupabaseResponse<{
+        id: string;
+        name: string;
+        logo_path?: string | null;
+      }>;
         
       if (workspaceError) {
         throw workspaceError;
@@ -215,7 +244,7 @@ export default function Onboarding() {
 
       // Update settings
       const normalizedModules = normalizeEnabledModules(enabledModules);
-      const { error: settingsError } = await withTimeout(
+      const { error: settingsError } = (await withTimeout(
         supabase
           .from("workspace_settings")
           .upsert(
@@ -228,7 +257,7 @@ export default function Onboarding() {
             { onConflict: "workspace_id" }
           ),
         "salvar configurações"
-      );
+      )) as SupabaseResponse<{ workspace_id: string }>;
         
       if (settingsError) {
         throw settingsError;
