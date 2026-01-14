@@ -30,6 +30,14 @@ export default function Paywall() {
       return;
     }
 
+    const anonKey =
+      (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string) ??
+      (import.meta.env.VITE_SUPABASE_ANON_KEY as string);
+    if (!anonKey) {
+      toast.error("Chave pública do Supabase não configurada.");
+      return;
+    }
+
     setIsLoading(true);
     track(AnalyticsEvents.CHECKOUT_STARTED, { price: LIFETIME_PRICE });
 
@@ -44,6 +52,7 @@ export default function Paywall() {
       const response = await supabase.functions.invoke("billing_create_lifetime", {
         headers: {
           Authorization: `Bearer ${session.access_token}`,
+          apikey: anonKey,
         },
       });
 

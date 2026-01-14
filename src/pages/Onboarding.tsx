@@ -23,6 +23,12 @@ const AVAILABLE_MODULES: { key: ModuleKey; label: string; description: string }[
   { key: "admin", label: "Administração", description: "Regras de cálculo, links e auditoria" },
 ];
 
+function generateSlug(email: string): string {
+  const base = email.split("@")[0].toLowerCase().replace(/[^a-z0-9]/g, "-");
+  const suffix = Math.random().toString(36).substring(2, 8);
+  return `${base}-${suffix}`;
+}
+
 export default function Onboarding() {
   const navigate = useNavigate();
   const { workspace, refreshWorkspace, isAuthenticated, isLoading: authLoading } = useAuth();
@@ -46,12 +52,31 @@ export default function Onboarding() {
     ...modules,
     admin: true,
   });
+  const requestTimeoutMs = 10000;
+
+  const withTimeout = async <T,>(promise: PromiseLike<T>, label: string): Promise<T> => {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => {
+        reject(new Error(`Timeout ao ${label}. Tente novamente.`));
+      }, requestTimeoutMs);
+    });
+
+    try {
+      return await Promise.race([Promise.resolve(promise), timeoutPromise]);
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+    }
+  };
 
   useEffect(() => {
     if (workspace?.name) {
       setWorkspaceName(workspace.name);
     }
-  }, [workspace?.name]);
+    if (workspace?.logo_path && !logoPreview) {
+      setLogoPreview(`/api/storage/workspace-logos/${workspace.logo_path}`);
+    }
+  }, [workspace?.name, workspace?.logo_path, logoPreview]);
 
   if (authLoading) {
     return (
@@ -88,24 +113,82 @@ export default function Onboarding() {
   };
 
   const handleComplete = async () => {
-    if (!workspace) {
-      toast.error("Workspace não carregado. Recarregue a página.");
-      return;
-    }
-    
     setIsLoading(true);
 
     try {
+      let activeWorkspace = workspace;
+      if (!activeWorkspace) {
+        const { data: { user } } = await withTimeout(
+          supabase.auth.getUser(),
+          "carregar usuário"
+        );
+        if (!user) {
+          throw new Error("Sessão inválida. Faça login novamente.");
+        }
+
+        const { data: existingWs, error: existingWsError } = await withTimeout(
+          supabase
+            .from("workspaces")
+            .select("*")
+            .eq("owner_user_id", user.id)
+            .single(),
+          "buscar workspace"
+        );
+
+        if (existingWsError || !existingWs) {
+          const email = user.email || "user@example.com";
+          const displayName =
+            user.user_metadata?.name ||
+            user.user_metadata?.full_name ||
+            email.split("@")[0];
+
+          const { data: newWs, error: createError } = await withTimeout(
+            supabase
+              .from("workspaces")
+              .insert({
+                owner_user_id: user.id,
+                name: String(displayName),
+                slug: generateSlug(email),
+              })
+              .select()
+              .single(),
+            "criar workspace"
+          );
+
+          if (createError || !newWs) {
+            throw createError || new Error("Não foi possível criar o workspace.");
+          }
+
+          await withTimeout(
+            supabase.from("entitlements").upsert({
+              workspace_id: newWs.id,
+              lifetime_access: false,
+            }),
+            "criar entitlement"
+          );
+
+          activeWorkspace = newWs;
+        } else {
+          activeWorkspace = existingWs;
+        }
+      }
+
+      if (!activeWorkspace) {
+        throw new Error("Workspace não encontrado. Recarregue a página.");
+      }
+
+      const ensuredWorkspace = activeWorkspace;
       let logoPath: string | null = null;
 
       // Upload logo if provided
       if (logoFile) {
         const fileExt = logoFile.name.split(".").pop();
-        const fileName = `${workspace.id}/logo.${fileExt}`;
+        const fileName = `${ensuredWorkspace.id}/logo.${fileExt}`;
         
-        const { error: uploadError } = await supabase.storage
-          .from("workspace-logos")
-          .upload(fileName, logoFile, { upsert: true });
+        const { error: uploadError } = await withTimeout(
+          supabase.storage.from("workspace-logos").upload(fileName, logoFile, { upsert: true }),
+          "enviar a logo"
+        );
 
         if (uploadError) {
           throw uploadError;
@@ -115,13 +198,16 @@ export default function Onboarding() {
       }
 
       // Update workspace name and logo
-      const { error: workspaceError } = await supabase
-        .from("workspaces")
-        .update({
-          name: workspaceName,
-          ...(logoPath && { logo_path: logoPath }),
-        })
-        .eq("id", workspace.id);
+      const { error: workspaceError } = await withTimeout(
+        supabase
+          .from("workspaces")
+          .update({
+            name: workspaceName,
+            ...(logoPath && { logo_path: logoPath }),
+          })
+          .eq("id", ensuredWorkspace.id),
+        "atualizar o escritório"
+      );
         
       if (workspaceError) {
         throw workspaceError;
@@ -129,17 +215,20 @@ export default function Onboarding() {
 
       // Update settings
       const normalizedModules = normalizeEnabledModules(enabledModules);
-      const { error: settingsError } = await supabase
-        .from("workspace_settings")
-        .upsert(
-          {
-            workspace_id: workspace.id,
-            enabled_modules: normalizedModules,
-            completed_onboarding: true,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "workspace_id" }
-        );
+      const { error: settingsError } = await withTimeout(
+        supabase
+          .from("workspace_settings")
+          .upsert(
+            {
+              workspace_id: ensuredWorkspace.id,
+              enabled_modules: normalizedModules,
+              completed_onboarding: true,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "workspace_id" }
+          ),
+        "salvar configurações"
+      );
         
       if (settingsError) {
         throw settingsError;
@@ -152,7 +241,7 @@ export default function Onboarding() {
           .join(","),
       });
 
-      await refreshWorkspace();
+      await withTimeout(refreshWorkspace(), "recarregar o workspace");
       
       toast.success("Configuração concluída!");
       navigate("/paywall");
@@ -169,12 +258,20 @@ export default function Onboarding() {
     <div className="min-h-screen relative overflow-hidden flex items-center justify-center p-4">
       <ProceduralGroundBackground />
       
-      <div className="w-full max-w-2xl">
-        <AnimatedCard className="p-6">
+      <div className="w-full max-w-xl">
+        <AnimatedCard className="p-5">
           {/* Header */}
-          <div className="text-center mb-6">
-            <div className="mx-auto mb-4 w-16 h-16 rounded-full bg-blue-500/20 flex items-center justify-center">
-              <Building2 className="w-8 h-8 text-blue-400" />
+          <div className="text-center mb-4">
+            <div className="mx-auto mb-3 w-14 h-14 rounded-full bg-blue-500/20 flex items-center justify-center overflow-hidden">
+              {logoPreview ? (
+                <img
+                  src={logoPreview}
+                  alt="Logo do escritório"
+                  className="h-10 w-10 object-contain"
+                />
+              ) : (
+                <Building2 className="w-8 h-8 text-blue-400" />
+              )}
             </div>
             <h1 className="text-2xl font-bold text-white">Configure seu Escritório</h1>
             <p className="text-white/60">
@@ -182,9 +279,9 @@ export default function Onboarding() {
             </p>
           </div>
 
-          <div className="space-y-6 text-white">
+          <div className="space-y-4 text-white">
             {step === 1 && (
-              <div className="space-y-6">
+              <div className="space-y-5">
                 <div className="space-y-2">
                   <Label htmlFor="name">Nome do Escritório</Label>
                   <Input
@@ -238,13 +335,13 @@ export default function Onboarding() {
                   Selecione os módulos que deseja habilitar. Você pode alterar isso depois.
                 </p>
 
-                <div className="space-y-3">
+                <div className="space-y-2">
                   {AVAILABLE_MODULES.map((module) => {
                     const isAdmin = module.key === "admin";
                     return (
                       <div
                         key={module.key}
-                        className={`flex items-start gap-3 p-3 rounded-lg bg-white/5 transition-colors ${
+                        className={`flex items-start gap-3 p-2 rounded-lg bg-white/5 transition-colors ${
                           isAdmin ? "cursor-not-allowed opacity-80" : "cursor-pointer hover:bg-white/10"
                         }`}
                         onClick={isAdmin ? undefined : () => toggleModule(module.key)}
@@ -257,7 +354,7 @@ export default function Onboarding() {
                         />
                         <div className="flex-1">
                           <p className="font-medium">{module.label}</p>
-                          <p className="text-sm text-white/50">{module.description}</p>
+                          <p className="text-xs text-white/50">{module.description}</p>
                         </div>
                       </div>
                     );
@@ -274,7 +371,7 @@ export default function Onboarding() {
                   </Button>
                   <Button
                     onClick={handleComplete}
-                    disabled={isLoading || !workspace}
+                    disabled={isLoading}
                     className="flex-1 bg-blue-600 hover:bg-blue-700"
                   >
                     {isLoading ? (
