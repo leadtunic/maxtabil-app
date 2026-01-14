@@ -46,7 +46,10 @@ export default function Paywall() {
         return;
       }
 
-      const response = await fetch(`${supabaseUrl}/functions/v1/billing_create_lifetime`, {
+      const functionUrl = `${supabaseUrl}/functions/v1/billing_create_lifetime?apikey=${encodeURIComponent(
+        supabaseAnonKey,
+      )}`;
+      const response = await fetch(functionUrl, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${session.access_token}`,
