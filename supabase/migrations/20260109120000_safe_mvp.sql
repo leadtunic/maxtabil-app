@@ -1,84 +1,78 @@
--- Multi-tenant MVP Migration
--- Adds workspaces, settings, entitlements, and multi-tenant support
+-- =============================================
+-- SAFE MVP MIGRATION (IDEMPOTENT)
+-- =============================================
 
 -- =============================================
 -- 1. WORKSPACES
 -- =============================================
 CREATE TABLE IF NOT EXISTS public.workspaces (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  owner_user_id uuid NOT NULL,
   name text NOT NULL,
-  slug text UNIQUE NOT NULL,
-  logo_path text NULL,
-  created_at timestamptz NOT NULL DEFAULT now()
+  slug text NOT NULL UNIQUE,
+  owner_user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  logo_url text NULL,
+  plan text NOT NULL DEFAULT 'free' CHECK (plan IN ('free', 'starter', 'professional', 'enterprise')),
+  subscription_status text NOT NULL DEFAULT 'trialing' CHECK (subscription_status IN ('trialing', 'active', 'past_due', 'cancelled', 'paused')),
+  trial_ends_at timestamptz NULL,
+  current_period_ends_at timestamptz NULL,
+  abacatepay_customer_id text NULL,
+  abacatepay_subscription_id text NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS workspaces_owner_idx ON public.workspaces(owner_user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS workspaces_owner_idx ON public.workspaces(owner_user_id);
 CREATE INDEX IF NOT EXISTS workspaces_slug_idx ON public.workspaces(slug);
+CREATE INDEX IF NOT EXISTS workspaces_plan_idx ON public.workspaces(plan);
 
 -- =============================================
 -- 2. WORKSPACE SETTINGS
 -- =============================================
 CREATE TABLE IF NOT EXISTS public.workspace_settings (
   workspace_id uuid PRIMARY KEY REFERENCES public.workspaces(id) ON DELETE CASCADE,
-  enabled_modules jsonb NOT NULL DEFAULT '{
-    "financeiro": true,
-    "financeiro_bpo": true,
-    "dp": true,
-    "fiscal_contabil": true,
-    "legalizacao": true,
-    "certificado_digital": true,
-    "admin": true
-  }'::jsonb,
-  completed_onboarding boolean NOT NULL DEFAULT false,
-  created_at timestamptz NOT NULL DEFAULT now(),
+  onboarding_completed boolean NOT NULL DEFAULT false,
+  default_currency text NOT NULL DEFAULT 'BRL',
+  default_timezone text NOT NULL DEFAULT 'America/Sao_Paulo',
+  feature_flags jsonb NOT NULL DEFAULT '{}',
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
 -- =============================================
--- 3. ENTITLEMENTS (Lifetime Access)
+-- 3. ENTITLEMENTS
 -- =============================================
 CREATE TABLE IF NOT EXISTS public.entitlements (
-  workspace_id uuid PRIMARY KEY REFERENCES public.workspaces(id) ON DELETE CASCADE,
-  lifetime_access boolean NOT NULL DEFAULT false,
-  lifetime_paid_at timestamptz NULL,
-  abacate_billing_id text NULL,
-  abacate_status text NULL,
-  updated_at timestamptz NOT NULL DEFAULT now()
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  workspace_id uuid NOT NULL REFERENCES public.workspaces(id) ON DELETE CASCADE,
+  feature text NOT NULL,
+  limit_value int NULL,
+  current_usage int NOT NULL DEFAULT 0,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE(workspace_id, feature)
 );
 
+CREATE INDEX IF NOT EXISTS entitlements_workspace_idx ON public.entitlements(workspace_id);
+
 -- =============================================
--- 4. ADD workspace_id TO EXISTING TABLES
+-- 4. ADD WORKSPACE_ID TO EXISTING TABLES
 -- =============================================
-
--- Audit Logs
-ALTER TABLE public.audit_logs 
-ADD COLUMN IF NOT EXISTS workspace_id uuid NULL REFERENCES public.workspaces(id) ON DELETE SET NULL;
-
-CREATE INDEX IF NOT EXISTS audit_logs_workspace_idx ON public.audit_logs(workspace_id);
-
--- RuleSets
-ALTER TABLE public.rulesets 
-ADD COLUMN IF NOT EXISTS workspace_id uuid NULL REFERENCES public.workspaces(id) ON DELETE CASCADE;
-
-CREATE INDEX IF NOT EXISTS rulesets_workspace_idx ON public.rulesets(workspace_id);
-
--- App Links
-ALTER TABLE public.app_links 
-ADD COLUMN IF NOT EXISTS workspace_id uuid NULL REFERENCES public.workspaces(id) ON DELETE CASCADE;
-
-CREATE INDEX IF NOT EXISTS app_links_workspace_idx ON public.app_links(workspace_id);
-
--- Home Recados (if exists)
 DO $$
 BEGIN
-  IF EXISTS (SELECT FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'home_recados') THEN
-    ALTER TABLE public.home_recados 
-    ADD COLUMN IF NOT EXISTS workspace_id uuid NULL REFERENCES public.workspaces(id) ON DELETE CASCADE;
-    
-    CREATE INDEX IF NOT EXISTS home_recados_workspace_idx ON public.home_recados(workspace_id);
+  -- rulesets
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'rulesets' AND column_name = 'workspace_id') THEN
+    ALTER TABLE public.rulesets ADD COLUMN workspace_id uuid REFERENCES public.workspaces(id) ON DELETE CASCADE;
+    CREATE INDEX rulesets_workspace_idx ON public.rulesets(workspace_id);
   END IF;
-END $$;
+  -- app_links
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'app_links' AND column_name = 'workspace_id') THEN
+    ALTER TABLE public.app_links ADD COLUMN workspace_id uuid REFERENCES public.workspaces(id) ON DELETE CASCADE;
+    CREATE INDEX app_links_workspace_idx ON public.app_links(workspace_id);
+  END IF;
+  -- audit_logs
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'audit_logs' AND column_name = 'workspace_id') THEN
+    ALTER TABLE public.audit_logs ADD COLUMN workspace_id uuid REFERENCES public.workspaces(id) ON DELETE SET NULL;
+    CREATE INDEX audit_logs_workspace_idx ON public.audit_logs(workspace_id);
+  END IF;
+END$$;
 
 -- =============================================
 -- 5. LEGAL DOCUMENTS
@@ -86,14 +80,13 @@ END $$;
 CREATE TABLE IF NOT EXISTS public.legal_documents (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   workspace_id uuid NOT NULL REFERENCES public.workspaces(id) ON DELETE CASCADE,
-  type text NOT NULL CHECK (type IN ('CND', 'BOMBEIRO', 'SANITARIA', 'ALVARA')),
-  issuer text NULL,
-  number text NULL,
-  issued_at date NULL,
-  expires_at date NOT NULL,
-  status text NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'EXPIRED', 'RENEWING')),
-  notes text NULL,
+  title text NOT NULL,
+  type text NOT NULL CHECK (type IN ('CONTRACT', 'LICENSE', 'CERTIFICATE', 'OTHER')),
+  status text NOT NULL DEFAULT 'VALID' CHECK (status IN ('VALID', 'EXPIRING_SOON', 'EXPIRED')),
+  expires_at date NULL,
+  reminder_days int NOT NULL DEFAULT 30,
   attachment_path text NULL,
+  notes text NULL,
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
@@ -129,7 +122,7 @@ CREATE TABLE IF NOT EXISTS public.bpo_clients (
   name text NOT NULL,
   document text NULL,
   segment text NULL,
-  monthly_fee numeric NULL,x
+  monthly_fee numeric NULL,
   is_active boolean NOT NULL DEFAULT true,
   created_at timestamptz NOT NULL DEFAULT now()
 );
@@ -186,7 +179,7 @@ ON CONFLICT (id) DO NOTHING;
 -- 11. ROW LEVEL SECURITY POLICIES
 -- =============================================
 
--- Enable RLS on new tables
+-- Enable RLS on tables
 ALTER TABLE public.workspaces ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.workspace_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.entitlements ENABLE ROW LEVEL SECURITY;
@@ -195,6 +188,30 @@ ALTER TABLE public.digital_certificates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.bpo_clients ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.bpo_tasks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.bpo_sla_rules ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.rulesets ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.app_links ENABLE ROW LEVEL SECURITY;
+
+-- DROP ALL POLICIES FIRST (SAFE)
+DROP POLICY IF EXISTS "workspace_owner_select" ON public.workspaces;
+DROP POLICY IF EXISTS "workspace_owner_insert" ON public.workspaces;
+DROP POLICY IF EXISTS "workspace_owner_update" ON public.workspaces;
+DROP POLICY IF EXISTS "workspace_owner_delete" ON public.workspaces;
+DROP POLICY IF EXISTS "settings_owner_all" ON public.workspace_settings;
+DROP POLICY IF EXISTS "entitlements_owner_all" ON public.entitlements;
+DROP POLICY IF EXISTS "legal_docs_owner_all" ON public.legal_documents;
+DROP POLICY IF EXISTS "digital_certs_owner_all" ON public.digital_certificates;
+DROP POLICY IF EXISTS "bpo_clients_owner_all" ON public.bpo_clients;
+DROP POLICY IF EXISTS "bpo_tasks_owner_all" ON public.bpo_tasks;
+DROP POLICY IF EXISTS "bpo_sla_owner_all" ON public.bpo_sla_rules;
+DROP POLICY IF EXISTS "audit_logs_owner_select" ON public.audit_logs;
+DROP POLICY IF EXISTS "audit_logs_insert" ON public.audit_logs;
+DROP POLICY IF EXISTS "rulesets_owner_all" ON public.rulesets;
+DROP POLICY IF EXISTS "app_links_owner_all" ON public.app_links;
+DROP POLICY IF EXISTS "workspace_logos_owner_select" ON storage.objects;
+DROP POLICY IF EXISTS "workspace_logos_owner_insert" ON storage.objects;
+DROP POLICY IF EXISTS "workspace_logos_owner_update" ON storage.objects;
+DROP POLICY IF EXISTS "workspace_logos_owner_delete" ON storage.objects;
 
 -- Workspaces: owner can do everything
 CREATE POLICY "workspace_owner_select" ON public.workspaces
@@ -252,8 +269,6 @@ CREATE POLICY "bpo_sla_owner_all" ON public.bpo_sla_rules
   );
 
 -- Audit Logs: owner via workspace (select only)
-ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
-
 CREATE POLICY "audit_logs_owner_select" ON public.audit_logs
   FOR SELECT USING (
     workspace_id IS NULL OR 
@@ -264,8 +279,6 @@ CREATE POLICY "audit_logs_insert" ON public.audit_logs
   FOR INSERT WITH CHECK (true);
 
 -- RuleSets: owner via workspace
-ALTER TABLE public.rulesets ENABLE ROW LEVEL SECURITY;
-
 CREATE POLICY "rulesets_owner_all" ON public.rulesets
   FOR ALL USING (
     workspace_id IS NULL OR 
@@ -273,8 +286,6 @@ CREATE POLICY "rulesets_owner_all" ON public.rulesets
   );
 
 -- App Links: owner via workspace
-ALTER TABLE public.app_links ENABLE ROW LEVEL SECURITY;
-
 CREATE POLICY "app_links_owner_all" ON public.app_links
   FOR ALL USING (
     workspace_id IS NULL OR 
@@ -309,14 +320,17 @@ USING (bucket_id = 'workspace-logos' AND (storage.foldername(name))[1] IN (
 -- =============================================
 -- 12. TRIGGERS FOR updated_at
 -- =============================================
+DROP TRIGGER IF EXISTS set_workspace_settings_updated_at ON public.workspace_settings;
 CREATE TRIGGER set_workspace_settings_updated_at
   BEFORE UPDATE ON public.workspace_settings
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
+DROP TRIGGER IF EXISTS set_entitlements_updated_at ON public.entitlements;
 CREATE TRIGGER set_entitlements_updated_at
   BEFORE UPDATE ON public.entitlements
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
+DROP TRIGGER IF EXISTS set_bpo_sla_rules_updated_at ON public.bpo_sla_rules;
 CREATE TRIGGER set_bpo_sla_rules_updated_at
   BEFORE UPDATE ON public.bpo_sla_rules
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();

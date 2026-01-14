@@ -10,6 +10,7 @@ import { trackPageview } from "@/lib/analytics";
 
 // Public Pages
 import Landing from "./pages/Landing";
+import ComoFunciona from "./pages/ComoFunciona";
 import Login from "./pages/Login";
 import Onboarding from "./pages/Onboarding";
 import Paywall from "./pages/Paywall";
@@ -56,6 +57,7 @@ const App = () => (
           <Routes>
             {/* Public Routes */}
             <Route path="/" element={<Landing />} />
+            <Route path="/como-funciona" element={<ComoFunciona />} />
             <Route path="/login" element={<Login />} />
             <Route path="/onboarding" element={<Onboarding />} />
             <Route path="/paywall" element={<Paywall />} />

@@ -62,11 +62,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchWorkspaceData = useCallback(async (userId: string) => {
     // Try to find existing workspace
-    let { data: ws, error: wsError } = await supabase
+    const { data: wsData, error: wsError } = await supabase
       .from("workspaces")
       .select("*")
       .eq("owner_user_id", userId)
       .single();
+    let ws = wsData;
 
     // If no workspace exists, create one
     if (wsError || !ws) {

@@ -32,7 +32,11 @@ interface AuthContextType {
 
   // Actions
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  signUp: (email: string, password: string, name?: string) => Promise<{ success: boolean; error?: string }>;
+  signUp: (
+    email: string,
+    password: string,
+    name?: string
+  ) => Promise<{ success: boolean; error?: string; requiresEmailConfirmation?: boolean }>;
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   refreshWorkspace: () => Promise<void>;
@@ -206,6 +210,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       } catch (error) {
         console.error("[Auth] Error initializing auth:", error);
+        if (
+          error instanceof Error &&
+          error.message.includes("Timeout while waiting for auth session")
+        ) {
+          void supabase.auth.signOut({ scope: "local" });
+          setSession(null);
+          setUser(null);
+          setWorkspace(null);
+          setSettings(null);
+          setEntitlement(null);
+        }
       } finally {
         if (mounted) setIsLoading(false);
       }
@@ -278,7 +293,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         track(AnalyticsEvents.AUTH_SIGNUP_SUCCESS, { method: "email" });
       }
 
-      return { success: true };
+      return { success: true, requiresEmailConfirmation: !data.session };
     },
     []
   );

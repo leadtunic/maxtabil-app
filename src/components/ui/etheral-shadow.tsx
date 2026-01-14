@@ -56,12 +56,13 @@ const useInstanceId = (): string => {
 
 export function Component({
     sizing = 'fill',
-    color = 'rgba(128, 128, 128, 1)',
+    color = 'rgba(30, 64, 175, 1)', // Blue-800 default for the app
     animation,
     noise,
     style,
-    className
-}: ShadowOverlayProps) {
+    className,
+    children
+}: ShadowOverlayProps & { children?: React.ReactNode }) {
     const id = useInstanceId();
     const animationEnabled = animation && animation.scale > 0;
     const feColorMatrixRef = useRef<SVGFEColorMatrixElement>(null);
@@ -183,9 +184,7 @@ export function Component({
                     zIndex: 10
                 }}
             >
-                <h1 className="md:text-7xl text-6xl lg:text-8xl font-bold text-center text-foreground relative z-20">
-                    Etheral Shadows
-                </h1>
+                {children}
             </div>
 
             {noise && noise.opacity > 0 && (

@@ -35,7 +35,6 @@ export default function Configuracoes() {
     fiscal_contabil: true,
     legalizacao: true,
     certificado_digital: true,
-    admin: true,
     ...(modules ?? {}),
     admin: true,
   });

@@ -1,9 +1,10 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef } from 'react';
 
 /**
  * ProceduralGroundBackground
  * A WebGL 2D background featuring topographic neon lines and sand-ripple movement.
  * Optimized for performance using fragment shaders.
+ * Color scheme: Blue/Cyan
  */
 const ProceduralGroundBackground: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -12,7 +13,7 @@ const ProceduralGroundBackground: React.FC = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const gl = canvas.getContext("webgl");
+    const gl = canvas.getContext('webgl');
     if (!gl) return;
 
     const vsSource = `
@@ -53,10 +54,10 @@ const ProceduralGroundBackground: React.FC = () => {
         // Neon Topographic Lines
         float topoLine = smoothstep(0.03, 0.0, abs(ripples));
         
-        // Color Palette
-        vec3 baseColor = vec3(0.04, 0.03, 0.12); // Deep Space
-        vec3 accentColor = vec3(0.1, 0.3, 0.8);   // Electric Blue
-        vec3 neonColor = vec3(0.6, 0.2, 1.0);     // Neon Purple
+        // Color Palette - BLUE THEME
+        vec3 baseColor = vec3(0.02, 0.04, 0.12);   // Deep Dark Blue
+        vec3 accentColor = vec3(0.05, 0.25, 0.6);  // Electric Blue
+        vec3 neonColor = vec3(0.2, 0.6, 1.0);      // Neon Cyan Blue
         
         // Composite
         vec3 finalColor = mix(baseColor, accentColor, n * 0.6);
@@ -85,11 +86,10 @@ const ProceduralGroundBackground: React.FC = () => {
 
     const buffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.bufferData(
-      gl.ARRAY_BUFFER,
-      new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]),
-      gl.STATIC_DRAW
-    );
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+      -1, -1,  1, -1, -1,  1,
+      -1,  1,  1, -1,  1,  1
+    ]), gl.STATIC_DRAW);
 
     const posAttrib = gl.getAttribLocation(program, "position");
     gl.enableVertexAttribArray(posAttrib);
@@ -125,7 +125,7 @@ const ProceduralGroundBackground: React.FC = () => {
       <canvas
         ref={canvasRef}
         className="w-full h-full block touch-none"
-        style={{ filter: "contrast(1.1) brightness(0.9)" }}
+        style={{ filter: 'contrast(1.1) brightness(0.9)' }}
       />
     </div>
   );

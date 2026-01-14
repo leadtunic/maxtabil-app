@@ -3,9 +3,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { track, AnalyticsEvents } from "@/lib/analytics";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
 import { Loader2, CreditCard, Check, Shield, Zap, Clock } from "lucide-react";
+import { AnimatedCard } from "@/components/ui/animated-card";
+import ProceduralGroundBackground from "@/components/ui/animated-pattern-cloud";
 
 const LIFETIME_PRICE = 997;
 const LIFETIME_PRICE_FORMATTED = "R$ 997,00";
@@ -68,26 +69,26 @@ export default function Paywall() {
   if (hasLifetimeAccess) {
     // Already paid - redirect handled by AppShell
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-        <Card className="w-full max-w-md bg-white/5 border-white/10 text-white text-center">
-          <CardContent className="pt-8">
-            <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-4">
-              <Check className="w-8 h-8 text-green-400" />
-            </div>
-            <h2 className="text-xl font-semibold mb-2">Acesso Liberado!</h2>
-            <p className="text-white/60">Você já possui acesso vitalício.</p>
-            <Button className="mt-6" onClick={() => window.location.href = "/app"}>
-              Ir para o Painel
-            </Button>
-          </CardContent>
-        </Card>
+      <div className="min-h-screen flex items-center justify-center bg-zinc-950 relative">
+        <ProceduralGroundBackground />
+        <AnimatedCard className="w-full max-w-md p-6 text-center">
+          <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-4">
+            <Check className="w-8 h-8 text-green-400" />
+          </div>
+          <h2 className="text-xl font-semibold text-white mb-2">Acesso Liberado!</h2>
+          <p className="text-white/60">Você já possui acesso vitalício.</p>
+          <Button className="mt-6 bg-blue-600 hover:bg-blue-700" onClick={() => window.location.href = "/app"}>
+            Ir para o Painel
+          </Button>
+        </AnimatedCard>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
-      <div className="w-full max-w-4xl">
+    <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4 relative">
+      <ProceduralGroundBackground />
+      <div className="w-full max-w-4xl relative z-10">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-white mb-2">Libere seu Acesso</h1>
           <p className="text-white/60">
@@ -97,18 +98,19 @@ export default function Paywall() {
 
         <div className="grid md:grid-cols-2 gap-6">
           {/* Pricing Card */}
-          <Card className="bg-white/5 border-white/10 text-white">
-            <CardHeader>
-              <div className="flex items-center gap-2 text-primary mb-2">
+          <AnimatedCard className="p-6">
+            <div className="mb-6">
+              <div className="flex items-center gap-2 text-blue-400 mb-2">
                 <CreditCard className="w-5 h-5" />
                 <span className="text-sm font-medium">PAGAMENTO ÚNICO</span>
               </div>
-              <CardTitle className="text-4xl font-bold">{LIFETIME_PRICE_FORMATTED}</CardTitle>
-              <CardDescription className="text-white/60">
+              <h2 className="text-4xl font-bold text-white">{LIFETIME_PRICE_FORMATTED}</h2>
+              <p className="text-white/60 mt-1">
                 Acesso vitalício - pague uma vez, use para sempre
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
+              </p>
+            </div>
+            
+            <div className="space-y-6">
               <ul className="space-y-3">
                 {FEATURES.map((feature) => (
                   <li key={feature} className="flex items-center gap-3">
@@ -122,7 +124,7 @@ export default function Paywall() {
                 onClick={handleCheckout}
                 disabled={isLoading}
                 size="lg"
-                className="w-full text-lg py-6"
+                className="w-full text-lg py-6 bg-blue-600 hover:bg-blue-700"
               >
                 {isLoading ? (
                   <>
@@ -140,21 +142,20 @@ export default function Paywall() {
               <p className="text-xs text-center text-white/40">
                 Pagamento processado por AbacatePay. Ambiente seguro.
               </p>
-            </CardContent>
-          </Card>
+            </div>
+          </AnimatedCard>
 
           {/* Benefits Card */}
-          <Card className="bg-white/5 border-white/10 text-white">
-            <CardHeader>
-              <CardTitle className="text-xl">Por que escolher nosso painel?</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
+          <AnimatedCard className="p-6">
+            <h2 className="text-xl font-semibold text-white mb-6">Por que escolher nosso painel?</h2>
+            
+            <div className="space-y-6">
               <div className="flex gap-4">
-                <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center shrink-0">
-                  <Zap className="w-5 h-5 text-primary" />
+                <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center shrink-0">
+                  <Zap className="w-5 h-5 text-blue-400" />
                 </div>
                 <div>
-                  <h3 className="font-medium mb-1">Produtividade</h3>
+                  <h3 className="font-medium text-white mb-1">Produtividade</h3>
                   <p className="text-sm text-white/60">
                     Simuladores e ferramentas que economizam horas do seu dia.
                   </p>
@@ -162,11 +163,11 @@ export default function Paywall() {
               </div>
 
               <div className="flex gap-4">
-                <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center shrink-0">
-                  <Shield className="w-5 h-5 text-primary" />
+                <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center shrink-0">
+                  <Shield className="w-5 h-5 text-blue-400" />
                 </div>
                 <div>
-                  <h3 className="font-medium mb-1">Segurança</h3>
+                  <h3 className="font-medium text-white mb-1">Segurança</h3>
                   <p className="text-sm text-white/60">
                     Seus dados isolados com políticas de acesso granulares.
                   </p>
@@ -174,27 +175,27 @@ export default function Paywall() {
               </div>
 
               <div className="flex gap-4">
-                <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center shrink-0">
-                  <Clock className="w-5 h-5 text-primary" />
+                <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center shrink-0">
+                  <Clock className="w-5 h-5 text-blue-400" />
                 </div>
                 <div>
-                  <h3 className="font-medium mb-1">Sem Mensalidade</h3>
+                  <h3 className="font-medium text-white mb-1">Sem Mensalidade</h3>
                   <p className="text-sm text-white/60">
                     Pagamento único. Sem surpresas, sem cobranças recorrentes.
                   </p>
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-white/10">
+              <div className="pt-4 border-t border-zinc-800">
                 <p className="text-sm text-white/60">
                   Precisa de ajuda? Entre em contato pelo e-mail{" "}
-                  <a href="mailto:suporte@example.com" className="text-primary hover:underline">
+                  <a href="mailto:suporte@example.com" className="text-blue-400 hover:underline">
                     suporte@example.com
                   </a>
                 </p>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </AnimatedCard>
         </div>
       </div>
     </div>

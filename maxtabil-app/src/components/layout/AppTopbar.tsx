@@ -18,8 +18,11 @@ export function AppTopbar() {
   const navigate = useNavigate();
 
   const handleLogout = async () => {
-    await logout();
-    navigate("/login");
+    try {
+      await logout();
+    } finally {
+      navigate("/login", { replace: true });
+    }
   };
 
   const handleProfile = () => {
@@ -77,12 +80,24 @@ export function AppTopbar() {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={handleProfile} className="cursor-pointer">
+            <DropdownMenuItem
+              onSelect={(event) => {
+                event.preventDefault();
+                handleProfile();
+              }}
+              className="cursor-pointer"
+            >
               <User className="w-4 h-4 mr-2" />
               Meu Perfil
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={handleLogout} className="text-destructive cursor-pointer">
+            <DropdownMenuItem
+              onSelect={(event) => {
+                event.preventDefault();
+                void handleLogout();
+              }}
+              className="text-destructive cursor-pointer"
+            >
               <LogOut className="w-4 h-4 mr-2" />
               Sair
             </DropdownMenuItem>

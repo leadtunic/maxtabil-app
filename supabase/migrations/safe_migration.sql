@@ -182,6 +182,11 @@ CREATE POLICY "bpo_tasks_via_workspace" ON public.bpo_tasks
     workspace_id IN (SELECT id FROM public.workspaces WHERE owner_user_id = auth.uid())
   );
 
+-- RuleSets select policy (evita reavaliar auth.uid por linha)
+DROP POLICY IF EXISTS "rulesets_select_auth" ON public.rulesets;
+CREATE POLICY "rulesets_select_auth" ON public.rulesets
+  FOR SELECT USING ((SELECT auth.uid()) IS NOT NULL);
+
 -- Home recados policies
 DROP POLICY IF EXISTS "home_recados_select_auth" ON public.home_recados;
 DROP POLICY IF EXISTS "home_recados_admin_insert" ON public.home_recados;

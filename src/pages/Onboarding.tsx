@@ -1,15 +1,16 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { track, AnalyticsEvents } from "@/lib/analytics";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { AnimatedCard } from "@/components/ui/animated-card";
+import ProceduralGroundBackground from "@/components/ui/animated-pattern-cloud";
 import { toast } from "sonner";
-import { Loader2, Upload, Building2, CheckCircle, Lock } from "lucide-react";
+import { Loader2, Upload, Building2 } from "lucide-react";
 import type { ModuleKey } from "@/types/supabase";
 
 const AVAILABLE_MODULES: { key: ModuleKey; label: string; description: string }[] = [
@@ -24,7 +25,7 @@ const AVAILABLE_MODULES: { key: ModuleKey; label: string; description: string }[
 
 export default function Onboarding() {
   const navigate = useNavigate();
-  const { workspace, refreshWorkspace } = useAuth();
+  const { workspace, refreshWorkspace, isAuthenticated, isLoading: authLoading } = useAuth();
   
   const [step, setStep] = useState(1);
   const [workspaceName, setWorkspaceName] = useState(workspace?.name || "");
@@ -45,6 +46,40 @@ export default function Onboarding() {
     ...modules,
     admin: true,
   });
+  const requestTimeoutMs = 10000;
+
+  const withTimeout = async <T,>(promise: Promise<T>, label: string): Promise<T> => {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => {
+        reject(new Error(`Timeout ao ${label}. Tente novamente.`));
+      }, requestTimeoutMs);
+    });
+
+    try {
+      return await Promise.race([promise, timeoutPromise]);
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+    }
+  };
+
+  useEffect(() => {
+    if (workspace?.name) {
+      setWorkspaceName(workspace.name);
+    }
+  }, [workspace?.name]);
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-white/70 bg-zinc-950">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
 
   const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -84,9 +119,10 @@ export default function Onboarding() {
         const fileExt = logoFile.name.split(".").pop();
         const fileName = `${workspace.id}/logo.${fileExt}`;
         
-        const { error: uploadError } = await supabase.storage
-          .from("workspace-logos")
-          .upload(fileName, logoFile, { upsert: true });
+        const { error: uploadError } = await withTimeout(
+          supabase.storage.from("workspace-logos").upload(fileName, logoFile, { upsert: true }),
+          "enviar a logo"
+        );
 
         if (uploadError) {
           throw uploadError;
@@ -96,27 +132,36 @@ export default function Onboarding() {
       }
 
       // Update workspace name and logo
-      const { error: workspaceError } = await supabase
-        .from("workspaces")
-        .update({
-          name: workspaceName,
-          ...(logoPath && { logo_path: logoPath }),
-        })
-        .eq("id", workspace.id);
+      const { error: workspaceError } = await withTimeout(
+        supabase
+          .from("workspaces")
+          .update({
+            name: workspaceName,
+            ...(logoPath && { logo_path: logoPath }),
+          })
+          .eq("id", workspace.id),
+        "atualizar o escritório"
+      );
       if (workspaceError) {
         throw workspaceError;
       }
 
       // Update settings
       const normalizedModules = normalizeEnabledModules(enabledModules);
-      const { error: settingsError } = await supabase
-        .from("workspace_settings")
-        .upsert({
-          workspace_id: workspace.id,
-          enabled_modules: normalizedModules,
-          completed_onboarding: true,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: "workspace_id" });
+      const { error: settingsError } = await withTimeout(
+        supabase
+          .from("workspace_settings")
+          .upsert(
+            {
+              workspace_id: workspace.id,
+              enabled_modules: normalizedModules,
+              completed_onboarding: true,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "workspace_id" }
+          ),
+        "salvar configurações"
+      );
       if (settingsError) {
         throw settingsError;
       }
@@ -128,7 +173,7 @@ export default function Onboarding() {
           .join(","),
       });
 
-      await refreshWorkspace();
+      await withTimeout(refreshWorkspace(), "recarregar o workspace");
       
       toast.success("Configuração concluída!");
       navigate("/paywall");
@@ -142,76 +187,79 @@ export default function Onboarding() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
-      <Card className="w-full max-w-2xl bg-white/5 border-white/10 text-white">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-4 w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center">
-            <Building2 className="w-8 h-8 text-primary" />
+    <div className="min-h-screen relative overflow-hidden flex items-center justify-center p-4 bg-zinc-950">
+      <ProceduralGroundBackground />
+      
+      <div className="w-full max-w-2xl">
+        <AnimatedCard className="p-6">
+          {/* Header */}
+          <div className="text-center mb-6">
+            <div className="mx-auto mb-4 w-16 h-16 rounded-full bg-blue-500/20 flex items-center justify-center">
+              <Building2 className="w-8 h-8 text-blue-400" />
+            </div>
+            <h1 className="text-2xl font-bold text-white">Configure seu Escritório</h1>
+            <p className="text-white/60">
+              {step === 1 ? "Informações básicas" : "Escolha os módulos"}
+            </p>
           </div>
-          <CardTitle className="text-2xl">Configure seu Escritório</CardTitle>
-          <CardDescription className="text-white/60">
-            {step === 1 ? "Informações básicas" : "Escolha os módulos"}
-          </CardDescription>
-        </CardHeader>
 
-        <CardContent className="space-y-6">
-          {step === 1 && (
-            <div className="space-y-6">
-              <div className="space-y-2">
-                <Label htmlFor="name">Nome do Escritório</Label>
-                <Input
-                  id="name"
-                  value={workspaceName}
-                  onChange={(e) => setWorkspaceName(e.target.value)}
-                  placeholder="Meu Escritório Contábil"
-                  className="bg-white/5 border-white/10"
-                />
-              </div>
+          <div className="space-y-6 text-white">
+            {step === 1 && (
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Nome do Escritório</Label>
+                  <Input
+                    id="name"
+                    value={workspaceName}
+                    onChange={(e) => setWorkspaceName(e.target.value)}
+                    placeholder="Meu Escritório Contábil"
+                    className="bg-white/5 border-white/10"
+                  />
+                </div>
 
-              <div className="space-y-2">
-                <Label>Logo (opcional)</Label>
-                <div className="flex items-center gap-4">
-                  {logoPreview ? (
-                    <img
-                      src={logoPreview}
-                      alt="Preview"
-                      className="w-20 h-20 object-contain rounded-lg bg-white/10"
-                    />
-                  ) : (
-                    <div className="w-20 h-20 rounded-lg bg-white/10 flex items-center justify-center">
-                      <Upload className="w-8 h-8 text-white/40" />
+                <div className="space-y-2">
+                  <Label>Logo (opcional)</Label>
+                  <div className="flex items-center gap-4">
+                    {logoPreview ? (
+                      <img
+                        src={logoPreview}
+                        alt="Preview"
+                        className="w-20 h-20 object-contain rounded-lg bg-white/10"
+                      />
+                    ) : (
+                      <div className="w-20 h-20 rounded-lg bg-white/10 flex items-center justify-center">
+                        <Upload className="w-8 h-8 text-white/40" />
+                      </div>
+                    )}
+                    <div>
+                      <Input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        onChange={handleLogoChange}
+                        className="bg-white/5 border-white/10"
+                      />
+                      <p className="text-xs text-white/40 mt-1">PNG, JPG ou WebP até 2MB</p>
                     </div>
-                  )}
-                  <div>
-                    <Input
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp"
-                      onChange={handleLogoChange}
-                      className="bg-white/5 border-white/10"
-                    />
-                    <p className="text-xs text-white/40 mt-1">PNG, JPG ou WebP até 2MB</p>
                   </div>
                 </div>
+
+                <Button
+                  onClick={() => setStep(2)}
+                  disabled={!workspaceName.trim()}
+                  className="w-full bg-blue-600 hover:bg-blue-700"
+                >
+                  Próximo
+                </Button>
               </div>
+            )}
 
-              <Button
-                onClick={() => setStep(2)}
-                disabled={!workspaceName.trim()}
-                className="w-full"
-              >
-                Próximo
-              </Button>
-            </div>
-          )}
+            {step === 2 && (
+              <div className="space-y-6">
+                <p className="text-sm text-white/60">
+                  Selecione os módulos que deseja habilitar. Você pode alterar isso depois.
+                </p>
 
-          {step === 2 && (
-            <div className="space-y-6">
-              <p className="text-sm text-white/60">
-                Selecione os módulos que deseja habilitar. Você pode alterar isso depois.
-              </p>
-
-              <div className="space-y-3">
-                {AVAILABLE_MODULES.map((module) => (
+                <div className="space-y-3">
                   {AVAILABLE_MODULES.map((module) => {
                     const isAdmin = module.key === "admin";
                     return (
@@ -232,41 +280,39 @@ export default function Onboarding() {
                           <p className="font-medium">{module.label}</p>
                           <p className="text-sm text-white/50">{module.description}</p>
                         </div>
-                        {isAdmin ? (
-                          <Lock className="w-5 h-5 text-white/40" />
-                        ) : (
-                          enabledModules[module.key] && (
-                            <CheckCircle className="w-5 h-5 text-green-400" />
-                          )
-                        )}
                       </div>
                     );
                   })}
-              </div>
+                </div>
 
-              <div className="flex gap-3">
-                <Button
-                  variant="outline"
-                  onClick={() => setStep(1)}
-                  className="flex-1 border-white/20 bg-transparent text-white hover:bg-white/10 hover:text-white"
-                >
-                  Voltar
-                </Button>
-                <Button onClick={handleComplete} disabled={isLoading} className="flex-1">
-                  {isLoading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Salvando...
-                    </>
-                  ) : (
-                    "Concluir"
-                  )}
-                </Button>
+                <div className="flex gap-3">
+                  <Button
+                    variant="outline"
+                    onClick={() => setStep(1)}
+                    className="flex-1 border-zinc-700 bg-transparent text-white hover:bg-zinc-800 hover:text-white"
+                  >
+                    Voltar
+                  </Button>
+                  <Button
+                    onClick={handleComplete}
+                    disabled={isLoading || !workspace}
+                    className="flex-1 bg-blue-600 hover:bg-blue-700"
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Salvando...
+                      </>
+                    ) : (
+                      "Concluir"
+                    )}
+                  </Button>
+                </div>
               </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            )}
+          </div>
+        </AnimatedCard>
+      </div>
     </div>
   );
 }

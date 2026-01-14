@@ -1,15 +1,16 @@
-import { useState } from "react";
-import { useNavigate, Navigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useNavigate, Navigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Loader2, AlertCircle, Mail, Lock, Eye, EyeOff, ArrowRight, User } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { z } from "zod";
+import { AnimatedCard } from "@/components/ui/animated-card";
+import ProceduralGroundBackground from "@/components/ui/animated-pattern-cloud";
 
 const loginSchema = z.object({
   email: z.string().email("E-mail inválido"),
@@ -25,8 +26,12 @@ const signUpSchema = z.object({
 export default function Login() {
   const { login, signUp, loginWithGoogle, isAuthenticated } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   
-  const [tab, setTab] = useState<"login" | "signup">("login");
+  const preferredTab = searchParams.get("tab");
+  const [tab, setTab] = useState<"login" | "signup">(
+    preferredTab === "signup" ? "signup" : "login"
+  );
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -34,6 +39,12 @@ export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [signUpSuccess, setSignUpSuccess] = useState(false);
+
+  useEffect(() => {
+    if (preferredTab === "signup" || preferredTab === "login") {
+      setTab(preferredTab);
+    }
+  }, [preferredTab]);
 
   if (isAuthenticated) {
     return <Navigate to="/app" replace />;
@@ -78,7 +89,11 @@ export default function Login() {
     try {
       const result = await signUp(email, password, name);
       if (result.success) {
-        setSignUpSuccess(true);
+        if (result.requiresEmailConfirmation) {
+          setSignUpSuccess(true);
+        } else {
+          navigate("/onboarding");
+        }
       } else {
         setError(result.error || "Erro ao criar conta");
       }
@@ -101,9 +116,10 @@ export default function Login() {
 
   if (signUpSuccess) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4">
-        <Card className="w-full max-w-md bg-white/5 border-white/10 text-white text-center">
-          <CardContent className="pt-8">
+      <div className="min-h-screen flex items-center justify-center bg-zinc-950 p-4 relative">
+        <ProceduralGroundBackground />
+        <AnimatedCard className="w-full max-w-md p-6">
+          <div className="text-center text-white">
             <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-4">
               <Mail className="w-8 h-8 text-green-400" />
             </div>
@@ -112,44 +128,37 @@ export default function Login() {
               Enviamos um link de confirmação para <strong>{email}</strong>.
               Clique no link para ativar sua conta.
             </p>
-            <Button variant="outline" onClick={() => {
+            <Button variant="outline" className="border-zinc-700 bg-transparent text-white hover:bg-zinc-800" onClick={() => {
               setSignUpSuccess(false);
               setTab("login");
             }}>
               Voltar ao Login
             </Button>
-          </CardContent>
-        </Card>
+          </div>
+        </AnimatedCard>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4">
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="w-full max-w-md"
-      >
-        <Card className="bg-white/5 border-white/10 text-white backdrop-blur-xl">
-          <CardHeader className="text-center space-y-4">
-            <div className="mx-auto">
-              <img
-                src="/logo.svg"
-                alt="Maxtabil"
-                className="h-12 w-auto object-contain"
-              />
+    <div className="min-h-screen flex items-center justify-center bg-zinc-950 p-4 relative">
+      <ProceduralGroundBackground />
+      <div className="w-full max-w-md">
+        <AnimatedCard className="p-6">
+          {/* Header */}
+          <div className="text-center space-y-4 mb-6">
+            <div className="mx-auto w-12 h-12 rounded-full border border-zinc-700 flex items-center justify-center">
+              <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-b from-white to-white/70">M</span>
             </div>
             <div>
-              <CardTitle className="text-2xl">Bem-vindo</CardTitle>
-              <CardDescription className="text-white/60">
+              <h1 className="text-2xl font-bold text-white">Bem-vindo</h1>
+              <p className="text-white/60 text-sm">
                 Acesse seu painel de gestão
-              </CardDescription>
+              </p>
             </div>
-          </CardHeader>
+          </div>
 
-          <CardContent className="space-y-6">
+          <div className="space-y-6 text-white">
             {/* Google OAuth Button */}
             <Button
               variant="outline"
@@ -374,9 +383,9 @@ export default function Login() {
             <p className="text-xs text-center text-white/40 pt-2">
               Ao continuar, você concorda com nossos termos de uso.
             </p>
-          </CardContent>
-        </Card>
-      </motion.div>
+          </div>
+        </AnimatedCard>
+      </div>
     </div>
   );
 }
