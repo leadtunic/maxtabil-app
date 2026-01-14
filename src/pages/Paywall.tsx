@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/lib/supabase";
+import { isSupabaseConfigured, supabase, supabaseAnonKey, supabaseUrl } from "@/lib/supabase";
 import { track, AnalyticsEvents } from "@/lib/analytics";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -30,11 +30,8 @@ export default function Paywall() {
       return;
     }
 
-    const anonKey =
-      (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string) ??
-      (import.meta.env.VITE_SUPABASE_ANON_KEY as string);
-    if (!anonKey) {
-      toast.error("Chave pública do Supabase não configurada.");
+    if (!isSupabaseConfigured || !supabaseUrl || !supabaseAnonKey) {
+      toast.error("Supabase não configurado. Verifique as variáveis de ambiente.");
       return;
     }
 
@@ -49,24 +46,30 @@ export default function Paywall() {
         return;
       }
 
-      const response = await supabase.functions.invoke("billing_create_lifetime", {
+      const response = await fetch(`${supabaseUrl}/functions/v1/billing_create_lifetime`, {
+        method: "POST",
         headers: {
           Authorization: `Bearer ${session.access_token}`,
-          apikey: anonKey,
+          apikey: supabaseAnonKey,
+          "Content-Type": "application/json",
         },
+        body: JSON.stringify({}),
       });
 
-      if (response.error) {
-        throw new Error(response.error.message);
+      if (!response.ok) {
+        const errorPayload = await response.json().catch(() => null);
+        const errorMessage = errorPayload?.message || "Erro ao iniciar pagamento.";
+        throw new Error(errorMessage);
       }
 
-      const { paymentUrl } = response.data;
+      const responsePayload = await response.json();
+      const paymentUrl = responsePayload?.paymentUrl ?? responsePayload?.data?.paymentUrl;
 
-      if (paymentUrl) {
-        window.location.href = paymentUrl;
-      } else {
+      if (!paymentUrl) {
         throw new Error("URL de pagamento não recebida");
       }
+
+      window.location.href = paymentUrl;
     } catch (error) {
       console.error("Checkout error:", error);
       toast.error("Erro ao iniciar pagamento. Tente novamente.");
