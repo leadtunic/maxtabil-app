@@ -17,6 +17,14 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+function isRefreshTokenError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const maybeError = error as { message?: string; code?: string };
+  const message = (maybeError.message ?? "").toLowerCase();
+  const code = (maybeError.code ?? "").toString().toLowerCase();
+  return message.includes("refresh_token_not_found") || code.includes("refresh_token_not_found");
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -87,8 +95,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const initAuth = async () => {
       try {
-        const { data } = await withTimeout(supabase.auth.getSession(), "auth session");
+        const { data, error } = await withTimeout(supabase.auth.getSession(), "auth session");
         if (!mounted) return;
+
+        if (error) {
+          if (isRefreshTokenError(error)) {
+            await supabase.auth.signOut({ scope: "local" });
+            setProfile(null);
+          } else {
+            console.warn("[Auth] Session error:", error);
+          }
+        }
 
         if (data.session?.user?.id) {
           await withTimeout(fetchProfile(data.session.user.id), "profile data");

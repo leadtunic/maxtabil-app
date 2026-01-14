@@ -55,6 +55,14 @@ function generateSlug(email: string): string {
   return `${base}-${suffix}`;
 }
 
+function isRefreshTokenError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const maybeError = error as { message?: string; code?: string };
+  const message = (maybeError.message ?? "").toLowerCase();
+  const code = (maybeError.code ?? "").toString().toLowerCase();
+  return message.includes("refresh_token_not_found") || code.includes("refresh_token_not_found");
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
@@ -196,13 +204,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       try {
-        const { data: { session: initialSession } } = await withTimeout(
+        const { data: { session: initialSession }, error } = await withTimeout(
           supabase.auth.getSession(),
           "auth session"
         );
-        
+
         if (!mounted) return;
-        
+
+        if (error) {
+          if (isRefreshTokenError(error)) {
+            await supabase.auth.signOut({ scope: "local" });
+            setSession(null);
+            setUser(null);
+            setWorkspace(null);
+            setSettings(null);
+            setEntitlement(null);
+          } else {
+            console.warn("[Auth] Session error:", error);
+          }
+        }
+
         if (initialSession?.user) {
           setSession(initialSession);
           setUser(initialSession.user);
