@@ -55,6 +55,13 @@ import { useSearchParams } from "react-router-dom";
 
 type TaskStatus = "pendente" | "em_andamento" | "concluido" | "cancelado";
 type TaskPriority = "baixa" | "media" | "alta" | "urgente";
+type TaskCategory =
+  | "CONTAS_PAGAR"
+  | "CONTAS_RECEBER"
+  | "CONCILIACAO"
+  | "RELATORIOS"
+  | "FECHAMENTO"
+  | "OUTROS";
 
 interface BpoClient {
   id: string;
@@ -69,6 +76,7 @@ interface BpoTask {
   description: string | null;
   status: TaskStatus;
   priority: TaskPriority;
+  category: TaskCategory;
   due_date: string | null;
   assigned_to: string | null;
   completed_at: string | null;
@@ -89,6 +97,15 @@ const PRIORITY_OPTIONS: { value: TaskPriority; label: string }[] = [
   { value: "media", label: "Média" },
   { value: "alta", label: "Alta" },
   { value: "urgente", label: "Urgente" },
+];
+
+const CATEGORY_OPTIONS: { value: TaskCategory; label: string }[] = [
+  { value: "CONTAS_PAGAR", label: "Contas a pagar" },
+  { value: "CONTAS_RECEBER", label: "Contas a receber" },
+  { value: "CONCILIACAO", label: "Conciliação" },
+  { value: "RELATORIOS", label: "Relatórios" },
+  { value: "FECHAMENTO", label: "Fechamento" },
+  { value: "OUTROS", label: "Outros" },
 ];
 
 const STATUS_BADGE_VARIANT: Record<TaskStatus, "default" | "secondary" | "outline"> = {
@@ -119,11 +136,28 @@ export default function BpoTasks() {
   const [editingTask, setEditingTask] = useState<BpoTask | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
+  const requestTimeoutMs = 15000;
+
+  const withTimeout = async <T,>(promise: PromiseLike<T>, label: string): Promise<T> => {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => {
+        reject(new Error(`Timeout ao ${label}. Tente novamente.`));
+      }, requestTimeoutMs);
+    });
+
+    try {
+      return await Promise.race([Promise.resolve(promise), timeoutPromise]);
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+    }
+  };
   // Form state
   const [formData, setFormData] = useState({
     client_id: "",
     title: "",
     description: "",
+    category: "OUTROS" as TaskCategory,
     status: "pendente" as TaskStatus,
     priority: "media" as TaskPriority,
     due_date: "",
@@ -184,6 +218,7 @@ export default function BpoTasks() {
       client_id: "",
       title: "",
       description: "",
+      category: "OUTROS",
       status: "pendente",
       priority: "media",
       due_date: "",
@@ -198,6 +233,7 @@ export default function BpoTasks() {
       client_id: task.client_id,
       title: task.title,
       description: task.description || "",
+      category: task.category || "OUTROS",
       status: task.status,
       priority: task.priority,
       due_date: task.due_date ? task.due_date.split("T")[0] : "",
@@ -211,6 +247,10 @@ export default function BpoTasks() {
       toast.error("Título e cliente são obrigatórios");
       return;
     }
+    if (!formData.due_date) {
+      toast.error("Data de vencimento é obrigatória");
+      return;
+    }
 
     setIsSaving(true);
 
@@ -219,6 +259,7 @@ export default function BpoTasks() {
         client_id: formData.client_id,
         title: formData.title,
         description: formData.description || null,
+        category: formData.category,
         status: formData.status,
         priority: formData.priority,
         due_date: formData.due_date || null,
@@ -228,21 +269,27 @@ export default function BpoTasks() {
       };
 
       if (editingTask) {
-        const { error } = await supabase
-          .from("bpo_tasks")
-          .update({
-            ...taskData,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", editingTask.id);
+        const { error } = await withTimeout(
+          supabase
+            .from("bpo_tasks")
+            .update({
+              ...taskData,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", editingTask.id),
+          "salvar a tarefa"
+        );
 
         if (error) throw error;
         toast.success("Tarefa atualizada!");
       } else {
-        const { error } = await supabase.from("bpo_tasks").insert({
-          workspace_id: workspace.id,
-          ...taskData,
-        });
+        const { error } = await withTimeout(
+          supabase.from("bpo_tasks").insert({
+            workspace_id: workspace.id,
+            ...taskData,
+          }),
+          "salvar a tarefa"
+        );
 
         if (error) throw error;
         toast.success("Tarefa criada!");
@@ -252,7 +299,8 @@ export default function BpoTasks() {
       fetchData();
     } catch (error) {
       console.error("Save error:", error);
-      toast.error("Erro ao salvar tarefa");
+      const message = error instanceof Error ? error.message : "Erro desconhecido";
+      toast.error("Erro ao salvar tarefa", { description: message });
     } finally {
       setIsSaving(false);
     }
@@ -528,6 +576,25 @@ export default function BpoTasks() {
                 placeholder="Detalhes da tarefa..."
                 rows={3}
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="category">Categoria</Label>
+              <Select
+                value={formData.category}
+                onValueChange={(v) => setFormData({ ...formData, category: v as TaskCategory })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CATEGORY_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="grid grid-cols-2 gap-4">

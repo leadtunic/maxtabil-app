@@ -4,8 +4,10 @@ import { AppSidebar } from "@/components/layout/AppSidebar";
 import { AppTopbar } from "@/components/layout/AppTopbar";
 import { SidebarProvider } from "@/components/ui/sidebar";
 
-// Set to true to bypass auth checks for development
+// Set to true to bypass auth checks for development or test mode
 const DEV_BYPASS_AUTH = import.meta.env.DEV && import.meta.env.VITE_DEV_BYPASS_AUTH === "true";
+const TEST_BYPASS_AUTH = import.meta.env.MODE === "test" && import.meta.env.VITE_TEST_BYPASS_AUTH === "true";
+const BYPASS_AUTH = DEV_BYPASS_AUTH || TEST_BYPASS_AUTH;
 
 export function AppShell() {
   const { isAuthenticated, isLoading, completedOnboarding, hasLifetimeAccess } = useAuth();
@@ -20,7 +22,7 @@ export function AppShell() {
   }
 
   // Allow bypassing auth in development
-  if (!DEV_BYPASS_AUTH) {
+  if (!BYPASS_AUTH) {
     if (!isAuthenticated) {
       return <Navigate to="/login" replace />;
     }

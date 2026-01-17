@@ -164,6 +164,19 @@ create table if not exists public.bpo_clients (
   updated_at timestamptz not null default now()
 );
 
+alter table public.bpo_clients
+  add column if not exists workspace_id uuid references public.workspaces(id) on delete cascade;
+alter table public.bpo_clients
+  add column if not exists contact_name text;
+alter table public.bpo_clients
+  add column if not exists contact_email text;
+alter table public.bpo_clients
+  add column if not exists contact_phone text;
+alter table public.bpo_clients
+  add column if not exists notes text;
+alter table public.bpo_clients
+  add column if not exists updated_at timestamptz not null default now();
+
 create index if not exists bpo_clients_workspace_idx on public.bpo_clients(workspace_id);
 
 create table if not exists public.bpo_tasks (
@@ -180,6 +193,17 @@ create table if not exists public.bpo_tasks (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.bpo_tasks
+  add column if not exists workspace_id uuid references public.workspaces(id) on delete cascade;
+alter table public.bpo_tasks
+  add column if not exists description text;
+alter table public.bpo_tasks
+  add column if not exists assigned_to text;
+alter table public.bpo_tasks
+  add column if not exists completed_at timestamptz;
+alter table public.bpo_tasks
+  add column if not exists updated_at timestamptz not null default now();
 
 create index if not exists bpo_tasks_workspace_idx on public.bpo_tasks(workspace_id);
 create index if not exists bpo_tasks_client_idx on public.bpo_tasks(client_id);
