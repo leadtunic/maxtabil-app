@@ -1,8 +1,9 @@
-# Arquitetura Atual - Maxtabil
+# Arquitetura Atual - Maxtabil (VPS + Dokploy + PostgreSQL)
 
 ## Visao geral
-A aplicacao e uma SPA React (Vite + TypeScript) com Supabase como backend
-(Auth, DB, Storage e Edge Functions). O fluxo principal e:
+A aplicacao e uma SPA React (Vite + TypeScript) hospedada em VPS, com deploy
+via Dokploy e backend proprio. O banco e PostgreSQL puro, sem Supabase.
+Fluxo principal:
 login -> onboarding -> paywall -> app.
 
 ## Estrutura do repositorio
@@ -37,10 +38,10 @@ login -> onboarding -> paywall -> app.
      - se onboarding incompleto -> `/onboarding`
      - se sem acesso pago -> `/paywall`
 
-## Backend (Supabase)
+## Backend (API + PostgreSQL)
 ### Auth
-- Supabase Auth (email/password, OAuth).
-- Allowlist: `public.allowed_emails` + funcao `public.is_email_allowed`.
+- Auth proprio (JWT + refresh) e OAuth (Google) no backend.
+- Allowlist: `public.allowed_emails` + funcao `public.is_email_allowed` no Postgres.
 
 ### Banco de dados (tabelas principais)
 - `profiles`: perfis e roles.
@@ -61,16 +62,16 @@ login -> onboarding -> paywall -> app.
 - Buckets: `workspace-logos`, `home-recados`.
 - Policies de upload/leitura em `storage.objects`.
 
-## Edge Functions (Supabase)
-Em `supabase/functions/`:
+## API/Worker (substitui Edge Functions)
 - `billing_create_lifetime`: cria cobranca AbacatePay (PIX).
 - `abacatepay_webhook`: recebe atualizacoes de pagamento.
-- `admin_*`: rotinas administrativas (criar/resetar/disable user).
+- Rotinas administrativas ficam no backend (sem Edge Functions).
 
-Variaveis usadas nas functions (exemplos):
-- `SUPABASE_URL`
-- `SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY`
+Variaveis usadas no backend (exemplos):
+- `DATABASE_URL`
+- `JWT_SECRET`
+- `GOOGLE_OAUTH_CLIENT_ID`
+- `GOOGLE_OAUTH_CLIENT_SECRET`
 - `ABACATEPAY_API_KEY`
 - `APP_BASE_URL`
 
@@ -83,23 +84,24 @@ Variaveis usadas nas functions (exemplos):
 - PostHog com envs `VITE_PUBLIC_POSTHOG_KEY` e `VITE_PUBLIC_POSTHOG_HOST`.
 - Eventos principais: login, signup, onboarding.
 
-## CI/CD
-GitHub Actions:
-- `CI`: lint + build em PR e push.
-- `Vercel Deploy`: preview em PR e producao em push.
-
-Secrets necessarios no GitHub:
-- `VERCEL_TOKEN`
-- `VERCEL_ORG_ID`
-- `VERCEL_PROJECT_ID`
+## Deploy (Dokploy)
+- Deploy via Dokploy (Nixpacks).
+- Servicos: frontend (Vite build + preview ou Nginx), backend API, PostgreSQL.
+- Reverse proxy e TLS gerenciados no Dokploy.
 
 ## Ambientes
-Env local:
-- `VITE_SUPABASE_URL`
-- `VITE_SUPABASE_PUBLISHABLE_KEY`
-- `VITE_DEV_BYPASS_AUTH` (dev)
+Frontend (build-time):
+- `VITE_API_BASE_URL`
 - `VITE_PUBLIC_POSTHOG_KEY`, `VITE_PUBLIC_POSTHOG_HOST` (opcional)
 
+Backend (runtime):
+- `DATABASE_URL`
+- `JWT_SECRET`
+- `GOOGLE_OAUTH_CLIENT_ID`
+- `GOOGLE_OAUTH_CLIENT_SECRET`
+- `ABACATEPAY_API_KEY`
+- `APP_BASE_URL`
+
 Recomendado:
-- Projetos Supabase separados para dev e prod.
-- Variaveis separadas no Vercel.
+- Instancias separadas (dev/prod) no Dokploy.
+- Variaveis separadas por ambiente.
