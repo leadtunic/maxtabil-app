@@ -9,7 +9,7 @@
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
-    "start": "vite preview --host 0.0.0.0 --port $PORT"
+    "start": "vite preview --host 0.0.0.0 --port ${PORT:-4173}"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",
