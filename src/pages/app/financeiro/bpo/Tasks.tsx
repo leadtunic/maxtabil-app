@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/lib/supabase";
+import { apiRequest } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -169,23 +169,14 @@ export default function BpoTasks() {
 
     try {
       // Fetch clients
-      const { data: clientsData } = await supabase
-        .from("bpo_clients")
-        .select("id, name")
-        .eq("workspace_id", workspace.id)
-        .eq("is_active", true)
-        .order("name");
+      const clientsData = await apiRequest<BpoClient[]>(
+        "/api/bpo/clients?activeOnly=true"
+      );
 
       setClients(clientsData || []);
 
       // Fetch tasks with client info
-      const { data: tasksData, error } = await supabase
-        .from("bpo_tasks")
-        .select("*, bpo_clients(id, name)")
-        .eq("workspace_id", workspace.id)
-        .order("due_date", { ascending: true, nullsFirst: false });
-
-      if (error) throw error;
+      const tasksData = await apiRequest<BpoTask[]>("/api/bpo/tasks");
       setTasks(tasksData || []);
     } catch (error) {
       console.error("Error fetching data:", error);
@@ -264,34 +255,27 @@ export default function BpoTasks() {
         priority: formData.priority,
         due_date: formData.due_date || null,
         assigned_to: formData.assigned_to || null,
-        completed_at:
-          formData.status === "concluido" ? new Date().toISOString() : null,
       };
 
       if (editingTask) {
-        const { error } = await withTimeout(
-          supabase
-            .from("bpo_tasks")
-            .update({
-              ...taskData,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", editingTask.id),
-          "salvar a tarefa"
-        );
-
-        if (error) throw error;
-        toast.success("Tarefa atualizada!");
-      } else {
-        const { error } = await withTimeout(
-          supabase.from("bpo_tasks").insert({
-            workspace_id: workspace.id,
-            ...taskData,
+        await withTimeout(
+          apiRequest(`/api/bpo/tasks/${editingTask.id}`, {
+            method: "PUT",
+            body: taskData,
           }),
           "salvar a tarefa"
         );
 
-        if (error) throw error;
+        toast.success("Tarefa atualizada!");
+      } else {
+        await withTimeout(
+          apiRequest("/api/bpo/tasks", {
+            method: "POST",
+            body: taskData,
+          }),
+          "salvar a tarefa"
+        );
+
         toast.success("Tarefa criada!");
       }
 
@@ -310,12 +294,7 @@ export default function BpoTasks() {
     if (!confirm(`Tem certeza que deseja excluir "${task.title}"?`)) return;
 
     try {
-      const { error } = await supabase
-        .from("bpo_tasks")
-        .delete()
-        .eq("id", task.id);
-
-      if (error) throw error;
+      await apiRequest(`/api/bpo/tasks/${task.id}`, { method: "DELETE" });
       toast.success("Tarefa excluída!");
       fetchData();
     } catch (error) {
@@ -326,16 +305,7 @@ export default function BpoTasks() {
 
   const markAsCompleted = async (task: BpoTask) => {
     try {
-      const { error } = await supabase
-        .from("bpo_tasks")
-        .update({
-          status: "concluido",
-          completed_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", task.id);
-
-      if (error) throw error;
+      await apiRequest(`/api/bpo/tasks/${task.id}/complete`, { method: "POST" });
       toast.success("Tarefa concluída!");
       fetchData();
     } catch (error) {

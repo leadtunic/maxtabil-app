@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/lib/supabase";
+import { apiRequest } from "@/lib/api";
 import { logAudit } from "@/lib/audit";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -45,13 +45,7 @@ export default function AdminLinks() {
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["app_links"],
     queryFn: async () => {
-      const { data: rows, error } = await supabase
-        .from("app_links")
-        .select("*")
-        .order("sort_order", { ascending: true });
-
-      if (error) throw error;
-      return rows as LinkItem[];
+      return apiRequest<LinkItem[]>("/api/links");
     },
   });
 
@@ -81,18 +75,18 @@ export default function AdminLinks() {
     }
 
     if (editingLink) {
-      const { error } = await supabase
-        .from("app_links")
-        .update({
-          title: formData.title,
-          url: formData.url,
-          category: formData.category,
-          sector: formData.sector,
-          is_active: formData.is_active,
-        })
-        .eq("id", editingLink.id);
-
-      if (error) {
+      try {
+        await apiRequest<LinkItem>(`/api/links/${editingLink.id}`, {
+          method: "PUT",
+          body: {
+            title: formData.title,
+            url: formData.url,
+            category: formData.category,
+            sector: formData.sector,
+            isActive: formData.is_active,
+          },
+        });
+      } catch (error) {
         toast.error("Não foi possível atualizar o link.");
         return;
       }
@@ -103,20 +97,20 @@ export default function AdminLinks() {
       toast.success("Link atualizado");
     } else {
       const nextOrder = links.length ? Math.max(...links.map((l) => l.sort_order)) + 1 : 1;
-      const { data: inserted, error } = await supabase
-        .from("app_links")
-        .insert({
-          title: formData.title,
-          url: formData.url,
-          category: formData.category,
-          sector: formData.sector,
-          is_active: formData.is_active,
-          sort_order: nextOrder,
-        })
-        .select("id")
-        .single();
-
-      if (error) {
+      let inserted: LinkItem | null = null;
+      try {
+        inserted = await apiRequest<LinkItem>("/api/links", {
+          method: "POST",
+          body: {
+            title: formData.title,
+            url: formData.url,
+            category: formData.category,
+            sector: formData.sector,
+            isActive: formData.is_active,
+            sortOrder: nextOrder,
+          },
+        });
+      } catch (error) {
         toast.error("Não foi possível adicionar o link.");
         return;
       }
@@ -144,12 +138,12 @@ export default function AdminLinks() {
   };
 
   const toggleLinkStatus = async (link: LinkItem) => {
-    const { error } = await supabase
-      .from("app_links")
-      .update({ is_active: !link.is_active })
-      .eq("id", link.id);
-
-    if (error) {
+    try {
+      await apiRequest<LinkItem>(`/api/links/${link.id}`, {
+        method: "PUT",
+        body: { isActive: !link.is_active },
+      });
+    } catch (error) {
       toast.error("Não foi possível atualizar o status.");
       return;
     }
@@ -162,8 +156,9 @@ export default function AdminLinks() {
   };
 
   const deleteLink = async (link: LinkItem) => {
-    const { error } = await supabase.from("app_links").delete().eq("id", link.id);
-    if (error) {
+    try {
+      await apiRequest(`/api/links/${link.id}`, { method: "DELETE" });
+    } catch (error) {
       toast.error("Não foi possível remover o link.");
       return;
     }

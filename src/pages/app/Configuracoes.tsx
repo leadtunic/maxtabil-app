@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/lib/supabase";
+import { apiRequest, apiUpload, buildApiUrl } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,7 +10,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { Loader2, Upload, Settings, Building2, Lock } from "lucide-react";
-import type { ModuleKey } from "@/types/supabase";
+import type { ModuleKey, Workspace, WorkspaceSettings } from "@/types/supabase";
+
+type UploadResponse = {
+  path?: string;
+};
 
 const AVAILABLE_MODULES: { key: ModuleKey; label: string }[] = [
   { key: "financeiro", label: "Financeiro - Honorários" },
@@ -38,7 +42,7 @@ export default function Configuracoes() {
     ...(modules ?? {}),
     admin: true,
   });
-  
+
   const [workspaceName, setWorkspaceName] = useState(workspace?.name || "");
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
@@ -52,6 +56,12 @@ export default function Configuracoes() {
       setWorkspaceName(workspace.name);
     }
   }, [workspace?.name]);
+
+  useEffect(() => {
+    if (workspace?.logo_path && !logoPreview) {
+      setLogoPreview(buildApiUrl(`/api/storage/workspace-logos/${workspace.logo_path}`));
+    }
+  }, [workspace?.logo_path, logoPreview]);
 
   useEffect(() => {
     if (settings?.enabled_modules) {
@@ -88,55 +98,41 @@ export default function Configuracoes() {
       toast.error("Workspace não carregado. Recarregue a página.");
       return;
     }
-    
+
+    if (!workspaceName.trim()) {
+      toast.error("Informe o nome do escritório.");
+      return;
+    }
+
     setIsSaving(true);
 
     try {
-      let logoPath = workspace.logo_path;
+      let logoPath = workspace.logo_path ?? null;
 
-      // Upload new logo if provided
       if (logoFile) {
-        const fileExt = logoFile.name.split(".").pop();
-        const fileName = `${workspace.id}/logo.${fileExt}`;
-        
-        const { error: uploadError } = await supabase.storage
-          .from("workspace-logos")
-          .upload(fileName, logoFile, { upsert: true });
-
-        if (uploadError) {
-          console.error("Logo upload error:", uploadError);
-          toast.error("Erro ao enviar logo", { description: uploadError.message });
-        } else {
-          logoPath = fileName;
+        const formData = new FormData();
+        formData.append("file", logoFile);
+        const upload = await apiUpload<UploadResponse>("/api/storage/workspace-logos", formData);
+        if (upload?.path) {
+          logoPath = upload.path;
         }
       }
 
-      // Update workspace
-      const { error: workspaceError } = await supabase
-        .from("workspaces")
-        .update({
-          name: workspaceName,
-          ...(logoPath && { logo_path: logoPath }),
-        })
-        .eq("id", workspace.id);
-      if (workspaceError) {
-        throw workspaceError;
-      }
+      await apiRequest<Workspace>("/api/workspace", {
+        method: "PUT",
+        body: {
+          name: workspaceName.trim(),
+          logoPath,
+        },
+      });
 
-      // Update settings
-      const { error: settingsError } = await supabase
-        .from("workspace_settings")
-        .upsert(
-          {
-            workspace_id: workspace.id,
-            enabled_modules: normalizeEnabledModules(enabledModules),
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "workspace_id" },
-        );
-      if (settingsError) {
-        throw settingsError;
-      }
+      await apiRequest<WorkspaceSettings>("/api/workspace/settings", {
+        method: "PUT",
+        body: {
+          enabledModules: normalizeEnabledModules(enabledModules),
+          completedOnboarding: settings?.completed_onboarding ?? false,
+        },
+      });
 
       await refreshWorkspace();
       toast.success("Configurações salvas!");
@@ -195,7 +191,7 @@ export default function Configuracoes() {
               <div className="flex items-center gap-4">
                 {logoPreview || workspace?.logo_path ? (
                   <img
-                    src={logoPreview || `/api/storage/workspace-logos/${workspace?.logo_path}`}
+                    src={logoPreview || buildApiUrl(`/api/storage/workspace-logos/${workspace?.logo_path}`)}
                     alt="Logo"
                     className="w-16 h-16 object-contain rounded-lg bg-slate-100"
                   />
@@ -218,38 +214,39 @@ export default function Configuracoes() {
         {/* Módulos */}
         <Card>
           <CardHeader>
-            <CardTitle>Módulos Habilitados</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Lock className="h-5 w-5" />
+              Módulos Ativos
+            </CardTitle>
             <CardDescription>
-              Escolha quais módulos aparecem no menu
+              Controle quais módulos estão disponíveis
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
+            <div className="space-y-2">
               {AVAILABLE_MODULES.map((module) => {
                 const isAdmin = module.key === "admin";
                 return (
-                <div
-                  key={module.key}
-                  className={`flex items-center gap-3 p-2 rounded transition-colors ${
-                    moduleContext?.key === module.key
-                      ? "bg-primary/5 border border-primary/20"
-                      : "hover:bg-slate-50"
-                  } ${isAdmin ? "cursor-not-allowed opacity-80" : "cursor-pointer"}`}
-                  onClick={isAdmin ? undefined : () => toggleModule(module.key)}
-                >
-                  <Checkbox
-                    checked={enabledModules[module.key]}
-                    onCheckedChange={isAdmin ? undefined : () => toggleModule(module.key)}
-                    disabled={isAdmin}
-                  />
-                  <span className="flex-1">{module.label}</span>
-                  {isAdmin && (
-                    <span className="text-slate-400" title="Administração sempre habilitada">
-                      <Lock className="h-4 w-4" />
-                    </span>
-                  )}
-                </div>
-              )})}
+                  <div
+                    key={module.key}
+                    className={`flex items-center justify-between rounded-lg border px-3 py-2 transition-colors ${
+                      isAdmin ? "cursor-not-allowed opacity-70" : "hover:bg-muted/50"
+                    }`}
+                  >
+                    <div>
+                      <p className="font-medium">{module.label}</p>
+                      {isAdmin && (
+                        <p className="text-xs text-muted-foreground">Sempre habilitado</p>
+                      )}
+                    </div>
+                    <Checkbox
+                      checked={enabledModules[module.key]}
+                      onCheckedChange={isAdmin ? undefined : () => toggleModule(module.key)}
+                      disabled={isAdmin}
+                    />
+                  </div>
+                );
+              })}
             </div>
           </CardContent>
         </Card>
@@ -258,14 +255,17 @@ export default function Configuracoes() {
       <Separator />
 
       <div className="flex justify-end">
-        <Button onClick={handleSave} disabled={isSaving}>
+        <Button
+          onClick={handleSave}
+          disabled={isSaving}
+        >
           {isSaving ? (
             <>
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               Salvando...
             </>
           ) : (
-            "Salvar Configurações"
+            "Salvar alterações"
           )}
         </Button>
       </div>

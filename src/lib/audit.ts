@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/supabase";
+import { apiRequest } from "@/lib/api";
 
 export async function logAudit(
   action: string,
@@ -7,23 +7,18 @@ export async function logAudit(
   metadata: Record<string, unknown> = {},
   workspaceId?: string | null,
 ): Promise<void> {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) return;
-
-  const { error } = await supabase.from("audit_logs").insert({
-    workspace_id: workspaceId ?? null,
-    actor_user_id: user.id,
-    actor_email: user.email ?? "",
-    action,
-    entity_type: entityType,
-    entity_id: entityId,
-    metadata,
-  });
-
-  if (error) {
+  try {
+    await apiRequest("/api/audit", {
+      method: "POST",
+      body: {
+        action,
+        entityType,
+        entityId,
+        metadata,
+        workspaceId: workspaceId ?? null,
+      },
+    });
+  } catch (error) {
     console.error("Audit log error:", error);
   }
 }

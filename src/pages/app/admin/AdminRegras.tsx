@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/lib/supabase";
+import { apiRequest } from "@/lib/api";
 import { logAudit } from "@/lib/audit";
 import { getDefaultPayload, validateRuleSetPayload } from "@/lib/rulesets";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -100,13 +100,7 @@ export default function AdminRegras() {
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["rulesets"],
     queryFn: async () => {
-      const { data: rows, error } = await supabase
-        .from("rulesets")
-        .select("*")
-        .order("simulator_key", { ascending: true })
-        .order("version", { ascending: false });
-
-      if (error) throw error;
+      const rows = await apiRequest<RuleSet[]>("/api/rulesets");
       return rows as RuleSet[];
     },
   });
@@ -761,77 +755,63 @@ export default function AdminRegras() {
       return;
     }
 
-    if (dialogMode === "edit" && editingRuleSet) {
-      const { error } = await supabase
-        .from("rulesets")
-        .update({
-          name: ruleName || editingRuleSet.name,
-          payload: parsed,
-        })
-        .eq("id", editingRuleSet.id);
+    try {
+      if (dialogMode === "edit" && editingRuleSet) {
+        await apiRequest(`/api/rulesets/${editingRuleSet.id}`, {
+          method: "PUT",
+          body: {
+            name: ruleName || editingRuleSet.name,
+            payload: parsed,
+          },
+        });
 
-      if (error) {
-        toast.error("Não foi possível atualizar.");
+        await logAudit("RULESET_UPDATED", "rulesets", editingRuleSet.id, {
+          simulator_key: activeKey,
+        });
+        toast.success("RuleSet atualizado.");
+        setDialogOpen(false);
+        refetch();
         return;
       }
 
-      await logAudit("RULESET_UPDATED", "rulesets", editingRuleSet.id, {
-        simulator_key: activeKey,
+      const existing = rulesByKey[activeKey] ?? [];
+      const maxVersion = existing.length ? Math.max(...existing.map((rs) => rs.version)) : 0;
+      const version = maxVersion + 1;
+
+      const inserted = await apiRequest<RuleSet>("/api/rulesets", {
+        method: "POST",
+        body: {
+          simulatorKey: activeKey,
+          name: ruleName || `Versão ${version}`,
+          version,
+          isActive: false,
+          payload: parsed,
+        },
       });
-      toast.success("RuleSet atualizado.");
+
+      await logAudit("RULESET_CREATED", "rulesets", inserted?.id ?? null, {
+        simulator_key: activeKey,
+        version,
+      });
+      toast.success("RuleSet criado.");
       setDialogOpen(false);
       refetch();
-      return;
+    } catch (error) {
+      toast.error("Não foi possível salvar o RuleSet.", {
+        description: error instanceof Error ? error.message : undefined,
+      });
     }
-
-    const existing = rulesByKey[activeKey] ?? [];
-    const maxVersion = existing.length ? Math.max(...existing.map((rs) => rs.version)) : 0;
-    const version = maxVersion + 1;
-
-    const { data: inserted, error } = await supabase
-      .from("rulesets")
-      .insert({
-        simulator_key: activeKey,
-        name: ruleName || `Versão ${version}`,
-        version,
-        is_active: false,
-        payload: parsed,
-      })
-      .select("id")
-      .single();
-
-    if (error) {
-      toast.error("Não foi possível criar o RuleSet.");
-      return;
-    }
-
-    await logAudit("RULESET_CREATED", "rulesets", inserted?.id ?? null, {
-      simulator_key: activeKey,
-      version,
-    });
-    toast.success("RuleSet criado.");
-    setDialogOpen(false);
-    refetch();
   };
 
   const handleActivate = async (ruleSet: RuleSet) => {
-    const { error: deactivateError } = await supabase
-      .from("rulesets")
-      .update({ is_active: false })
-      .eq("simulator_key", ruleSet.simulator_key);
-
-    if (deactivateError) {
-      toast.error("Não foi possível desativar versões anteriores.");
-      return;
-    }
-
-    const { error: activateError } = await supabase
-      .from("rulesets")
-      .update({ is_active: true })
-      .eq("id", ruleSet.id);
-
-    if (activateError) {
-      toast.error("Não foi possível ativar.");
+    try {
+      await apiRequest(`/api/rulesets/${ruleSet.id}/activate`, {
+        method: "POST",
+      });
+    } catch (error) {
+      toast.error("Não foi possível ativar.", {
+        description: error instanceof Error ? error.message : undefined,
+      });
       return;
     }
 

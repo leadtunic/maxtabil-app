@@ -3,6 +3,7 @@
 ## Visao geral
 A aplicacao e uma SPA React (Vite + TypeScript) hospedada em VPS, com deploy
 via Dokploy e backend proprio. O banco e PostgreSQL puro, sem Supabase.
+Autenticacao e sessao sao gerenciadas pelo Better Auth no backend.
 Fluxo principal:
 login -> onboarding -> paywall -> app.
 
@@ -24,13 +25,13 @@ login -> onboarding -> paywall -> app.
 
 ## Fluxos principais
 1) Login
-   - Auth via Supabase.
-   - Allowlist por email usando RPC `is_email_allowed` (tabela `allowed_emails`).
+   - Auth via Better Auth (email/senha e/ou OAuth).
+   - Allowlist por email via backend (consulta `allowed_emails` no Postgres).
 2) Onboarding
    - Cria workspace se nao existir.
    - Atualiza `workspace_settings` e opcionalmente upload de logo.
 3) Paywall
-   - Chama Edge Function `billing_create_lifetime`.
+   - Chama endpoint da API `billing_create_lifetime`.
    - Redireciona para URL de pagamento (PIX).
 4) App
    - AppShell faz o gate:
@@ -40,8 +41,9 @@ login -> onboarding -> paywall -> app.
 
 ## Backend (API + PostgreSQL)
 ### Auth
-- Auth proprio (JWT + refresh) e OAuth (Google) no backend.
-- Allowlist: `public.allowed_emails` + funcao `public.is_email_allowed` no Postgres.
+- Better Auth com sessoes e cookies HTTP-only.
+- OAuth (Google) e email/senha configurados no backend.
+- Allowlist: `public.allowed_emails` (checado no backend).
 
 ### Banco de dados (tabelas principais)
 - `profiles`: perfis e roles.
@@ -55,12 +57,11 @@ login -> onboarding -> paywall -> app.
 - `home_recados`: cards da home.
 
 ### RLS e Policies
-- RLS ativo nas tabelas principais.
-- Policies por `auth.uid()` e por role (`is_admin`, `is_legalizacao`).
+- RLS opcional nas tabelas principais.
+- Isolamento multi-tenant garantido pelo backend via `workspace_id`.
 
 ### Storage
-- Buckets: `workspace-logos`, `home-recados`.
-- Policies de upload/leitura em `storage.objects`.
+- Armazenamento via S3/MinIO ou filesystem com URLs assinadas.
 
 ## API/Worker (substitui Edge Functions)
 - `billing_create_lifetime`: cria cobranca AbacatePay (PIX).
@@ -69,15 +70,15 @@ login -> onboarding -> paywall -> app.
 
 Variaveis usadas no backend (exemplos):
 - `DATABASE_URL`
-- `JWT_SECRET`
+- `BETTER_AUTH_SECRET` (ou equivalente do Better Auth)
 - `GOOGLE_OAUTH_CLIENT_ID`
 - `GOOGLE_OAUTH_CLIENT_SECRET`
 - `ABACATEPAY_API_KEY`
 - `APP_BASE_URL`
 
 ## Integracao de pagamento (AbacatePay)
-- O frontend chama a Edge Function `billing_create_lifetime`.
-- A function cria a cobranca e retorna `paymentUrl`.
+- O frontend chama o endpoint da API `billing_create_lifetime`.
+- A API cria a cobranca e retorna `paymentUrl`.
 - Webhook atualiza `entitlements` e `audit_logs`.
 
 ## Analytics
@@ -96,7 +97,8 @@ Frontend (build-time):
 
 Backend (runtime):
 - `DATABASE_URL`
-- `JWT_SECRET`
+- `BETTER_AUTH_SECRET`
+- `BETTER_AUTH_BASE_URL`
 - `GOOGLE_OAUTH_CLIENT_ID`
 - `GOOGLE_OAUTH_CLIENT_SECRET`
 - `ABACATEPAY_API_KEY`

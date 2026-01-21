@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/lib/supabase";
-import { logAudit } from "@/lib/audit";
+import { apiRequest } from "@/lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,28 +44,17 @@ export default function AdminUsuarios() {
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["profiles", search, statusFilter, page],
     queryFn: async () => {
-      let query = supabase.from("profiles").select("*", { count: "exact" });
+      const params = new URLSearchParams();
+      if (search.trim()) params.set("search", search.trim());
+      if (statusFilter !== "ALL") params.set("status", statusFilter);
+      params.set("page", String(page));
+      params.set("pageSize", String(pageSize));
 
-      if (search.trim()) {
-        query = query.or(
-          `email.ilike.%${search.trim()}%,display_name.ilike.%${search.trim()}%`,
-        );
-      }
+      const response = await apiRequest<{ rows: Profile[]; count: number }>(
+        `/api/admin/users?${params.toString()}`
+      );
 
-      if (statusFilter !== "ALL") {
-        query = query.eq("is_active", statusFilter === "ACTIVE");
-      }
-
-      const from = (page - 1) * pageSize;
-      const to = from + pageSize - 1;
-
-      const { data: rows, error, count } = await query
-        .order("created_at", { ascending: false })
-        .range(from, to);
-
-      if (error) throw error;
-
-      return { rows: rows as Profile[], count: count ?? 0 };
+      return { rows: response.rows ?? [], count: response.count ?? 0 };
     },
   });
 
@@ -82,17 +70,20 @@ export default function AdminUsuarios() {
       return;
     }
 
-    const { error } = await supabase.functions.invoke("admin_create_user", {
-      body: {
-        email: newUser.email,
-        password: newUser.password,
-        display_name: newUser.display_name,
-        role: newUser.role,
-      },
-    });
-
-    if (error) {
-      toast.error("Falha ao criar usuário.", { description: error.message });
+    try {
+      await apiRequest("/api/admin/users", {
+        method: "POST",
+        body: {
+          email: newUser.email,
+          password: newUser.password,
+          display_name: newUser.display_name,
+          role: newUser.role,
+        },
+      });
+    } catch (error) {
+      toast.error("Falha ao criar usuário.", {
+        description: error instanceof Error ? error.message : undefined,
+      });
       return;
     }
 
@@ -108,12 +99,15 @@ export default function AdminUsuarios() {
       return;
     }
 
-    const { error } = await supabase.functions.invoke("admin_reset_password", {
-      body: { user_id: resetTarget.user_id, new_password: newPassword },
-    });
-
-    if (error) {
-      toast.error("Falha ao resetar senha.", { description: error.message });
+    try {
+      await apiRequest(`/api/admin/users/${resetTarget.user_id}/reset-password`, {
+        method: "POST",
+        body: { new_password: newPassword },
+      });
+    } catch (error) {
+      toast.error("Falha ao resetar senha.", {
+        description: error instanceof Error ? error.message : undefined,
+      });
       return;
     }
 
@@ -123,12 +117,14 @@ export default function AdminUsuarios() {
   };
 
   const handleDisableUser = async (profile: Profile) => {
-    const { error } = await supabase.functions.invoke("admin_disable_or_delete_user", {
-      body: { user_id: profile.user_id, mode: "disable" },
-    });
-
-    if (error) {
-      toast.error("Não foi possível desativar.", { description: error.message });
+    try {
+      await apiRequest(`/api/admin/users/${profile.user_id}/disable`, {
+        method: "POST",
+      });
+    } catch (error) {
+      toast.error("Não foi possível desativar.", {
+        description: error instanceof Error ? error.message : undefined,
+      });
       return;
     }
 
@@ -137,30 +133,30 @@ export default function AdminUsuarios() {
   };
 
   const handleEnableUser = async (profile: Profile) => {
-    const { error } = await supabase
-      .from("profiles")
-      .update({ is_active: true })
-      .eq("user_id", profile.user_id);
-
-    if (error) {
-      toast.error("Não foi possível ativar.", { description: error.message });
-      return;
+    try {
+      await apiRequest(`/api/admin/users/${profile.user_id}/enable`, {
+        method: "POST",
+      });
+      toast.success("Usuário ativado.");
+      refetch();
+    } catch (error) {
+      toast.error("Não foi possível ativar.", {
+        description: error instanceof Error ? error.message : undefined,
+      });
     }
-
-    await logAudit("USER_UPDATED", "profiles", profile.user_id, { is_active: true });
-    toast.success("Usuário ativado.");
-    refetch();
   };
 
   const handleDeleteUser = async () => {
     if (!confirmDelete) return;
 
-    const { error } = await supabase.functions.invoke("admin_disable_or_delete_user", {
-      body: { user_id: confirmDelete.user_id, mode: "delete" },
-    });
-
-    if (error) {
-      toast.error("Não foi possível excluir.", { description: error.message });
+    try {
+      await apiRequest(`/api/admin/users/${confirmDelete.user_id}`, {
+        method: "DELETE",
+      });
+    } catch (error) {
+      toast.error("Não foi possível excluir.", {
+        description: error instanceof Error ? error.message : undefined,
+      });
       return;
     }
 

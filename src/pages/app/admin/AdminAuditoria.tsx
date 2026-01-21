@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/lib/supabase";
+import { apiRequest } from "@/lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -67,31 +67,24 @@ export default function AdminAuditoria() {
   const { data, isLoading } = useQuery({
     queryKey: ["audit_logs", search, actionFilter, entityFilter, page],
     queryFn: async () => {
-      let query = supabase.from("audit_logs").select("*", { count: "exact" });
-
-      query = query.gte("created_at", retentionStart);
+      const params = new URLSearchParams({
+        page: String(page),
+        pageSize: String(pageSize),
+      });
 
       if (search.trim()) {
-        query = query.or(
-          `actor_email.ilike.%${search.trim()}%,entity_id.ilike.%${search.trim()}%`,
-        );
+        params.set("search", search.trim());
       }
       if (actionFilter !== "ALL") {
-        query = query.eq("action", actionFilter);
+        params.set("action", actionFilter);
       }
       if (entityFilter !== "ALL") {
-        query = query.eq("entity_type", entityFilter);
+        params.set("entity", entityFilter);
       }
 
-      const from = (page - 1) * pageSize;
-      const to = from + pageSize - 1;
-
-      const { data: rows, error, count } = await query
-        .order("created_at", { ascending: false })
-        .range(from, to);
-
-      if (error) throw error;
-      return { rows: rows as AuditLog[], count: count ?? 0 };
+      return apiRequest<{ rows: AuditLog[]; count: number }>(
+        `/api/audit/logs?${params.toString()}`
+      );
     },
   });
 

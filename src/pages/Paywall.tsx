@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { isSupabaseConfigured, supabase, supabaseAnonKey, supabaseUrl } from "@/lib/supabase";
+import { apiRequest } from "@/lib/api";
 import { track, AnalyticsEvents } from "@/lib/analytics";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -30,43 +30,15 @@ export default function Paywall() {
       return;
     }
 
-    if (!isSupabaseConfigured || !supabaseUrl || !supabaseAnonKey) {
-      toast.error("Supabase não configurado. Verifique as variáveis de ambiente.");
-      return;
-    }
-
     setIsLoading(true);
     track(AnalyticsEvents.CHECKOUT_STARTED, { price: LIFETIME_PRICE });
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session?.access_token) {
-        toast.error("Sessão expirada. Faça login novamente.");
-        return;
-      }
-
-      const functionUrl = `${supabaseUrl}/functions/v1/billing_create_lifetime?apikey=${encodeURIComponent(
-        supabaseAnonKey,
-      )}`;
-      const response = await fetch(functionUrl, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-          apikey: supabaseAnonKey,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({}),
-      });
-
-      if (!response.ok) {
-        const errorPayload = await response.json().catch(() => null);
-        const errorMessage = errorPayload?.message || "Erro ao iniciar pagamento.";
-        throw new Error(errorMessage);
-      }
-
-      const responsePayload = await response.json();
-      const paymentUrl = responsePayload?.paymentUrl ?? responsePayload?.data?.paymentUrl;
+      const responsePayload = await apiRequest<{ paymentUrl?: string }>(
+        "/api/billing/lifetime",
+        { method: "POST" }
+      );
+      const paymentUrl = responsePayload?.paymentUrl;
 
       if (!paymentUrl) {
         throw new Error("URL de pagamento não recebida");
@@ -75,7 +47,8 @@ export default function Paywall() {
       window.location.href = paymentUrl;
     } catch (error) {
       console.error("Checkout error:", error);
-      toast.error("Erro ao iniciar pagamento. Tente novamente.");
+      const message = error instanceof Error ? error.message : "Erro ao iniciar pagamento.";
+      toast.error(message);
     } finally {
       setIsLoading(false);
     }

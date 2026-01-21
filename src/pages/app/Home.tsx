@@ -24,7 +24,7 @@ import { toast } from "sonner";
 import { FramerCarousel, type CarouselItem } from "@/components/ui/framer-carousel";
 import { GuideDialog, useGuide } from "@/components/GuideDialog";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase, trackLinkClick } from "@/lib/supabase";
+import { apiRequest, apiUpload, buildApiUrl } from "@/lib/api";
 import type { LinkItem, LinkSector } from "@/types";
 
 const moduleCards = [
@@ -143,58 +143,27 @@ export default function Home() {
   const queryClient = useQueryClient();
   const { showGuide, openGuide, closeGuide } = useGuide();
   const isAdmin = hasModule("admin");
-  const recadoBucket = "home-recados";
   const maxRecadoImages = 3;
   const maxImageSizeMb = 2;
   const maxImageSizeBytes = maxImageSizeMb * 1024 * 1024;
-  const signedUrlExpiresIn = 60 * 60 * 12;
-  const getRecadoFileId = () => {
-    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-      return crypto.randomUUID();
-    }
-    return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  };
 
   // Get first name or email prefix as fallback
-  const displayName = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "Usuário";
+  const displayName = user?.name || user?.email?.split("@")[0] || "Usuário";
   const firstName = displayName.split(" ")[0];
 
   const { data: recadoItems = [], isError: recadosError } = useQuery({
     queryKey: ["home_recados"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("home_recados")
-        .select("id,title,image_path,created_at")
-        .eq("is_active", true)
-        .order("sort_order", { ascending: true })
-        .order("created_at", { ascending: false })
-        .limit(maxRecadoImages);
-
-      if (error) throw error;
-
-      const rows = (data ?? []) as HomeRecadoRow[];
-      if (!rows.length) return [] as CarouselItem[];
-
-      const signedItems = await Promise.all(
-        rows.map(async (row) => {
-          const { data: signedData, error: signedError } = await supabase.storage
-            .from(recadoBucket)
-            .createSignedUrl(row.image_path, signedUrlExpiresIn);
-
-          if (signedError || !signedData?.signedUrl) {
-            throw signedError ?? new Error("Falha ao gerar URL de recado.");
-          }
-
-          return {
-            id: row.id,
-            url: signedData.signedUrl,
-            title: row.title,
-            storagePath: row.image_path,
-          } satisfies CarouselItem;
-        })
+      const rows = await apiRequest<HomeRecadoRow[]>(
+        `/api/home-recados?limit=${maxRecadoImages}`
       );
 
-      return signedItems;
+      return (rows ?? []).map((row) => ({
+        id: row.id,
+        url: buildApiUrl(`/api/storage/${row.image_path}`),
+        title: row.title,
+        storagePath: row.image_path,
+      })) as CarouselItem[];
     },
   });
 
@@ -215,18 +184,7 @@ export default function Home() {
       return;
     }
 
-    const { count, error: countError } = await supabase
-      .from("home_recados")
-      .select("id", { count: "exact", head: true })
-      .eq("is_active", true);
-
-    if (countError) {
-      toast.error("Não foi possível validar o limite de recados.");
-      input.value = "";
-      return;
-    }
-
-    const existingCount = count ?? recadoItems.length;
+    const existingCount = recadoItems.length;
     const remainingSlots = Math.max(0, maxRecadoImages - existingCount);
     if (!remainingSlots) {
       toast.error(`Limite de ${maxRecadoImages} imagens atingido.`);
@@ -251,24 +209,10 @@ export default function Home() {
 
     const results = await Promise.allSettled(
       filesToProcess.map(async (file, index) => {
-        const extension = file.name.split(".").pop()?.toLowerCase() || "jpg";
-        const filePath = `recados/${getRecadoFileId()}.${extension}`;
-        const { error: uploadError } = await supabase.storage
-          .from(recadoBucket)
-          .upload(filePath, file, { cacheControl: "3600", upsert: false });
-
-        if (uploadError) throw uploadError;
-
-        const { error: insertError } = await supabase.from("home_recados").insert({
-          title: file.name || `Recado ${existingCount + index + 1}`,
-          image_path: filePath,
-          created_by: user?.id ?? null,
-        });
-
-        if (insertError) {
-          await supabase.storage.from(recadoBucket).remove([filePath]);
-          throw insertError;
-        }
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("title", file.name || `Recado ${existingCount + index + 1}`);
+        await apiUpload("/api/home-recados", formData);
       })
     );
 
@@ -285,23 +229,19 @@ export default function Home() {
     input.value = "";
   };
 
-  const handleRemoveRecado = async (id: string, storagePath?: string) => {
+  const handleRemoveRecado = async (id: string) => {
     if (!isAdmin) {
       toast.error("Você não tem permissão para remover recados.");
       return;
     }
 
-    const { error: deleteError } = await supabase.from("home_recados").delete().eq("id", id);
-    if (deleteError) {
-      toast.error("Não foi possível remover o recado.");
+    try {
+      await apiRequest(`/api/home-recados/${id}`, { method: "DELETE" });
+    } catch (error) {
+      toast.error("Não foi possível remover o recado.", {
+        description: error instanceof Error ? error.message : undefined,
+      });
       return;
-    }
-
-    if (storagePath) {
-      const { error: storageError } = await supabase.storage.from(recadoBucket).remove([storagePath]);
-      if (storageError) {
-        toast.error("Recado removido, mas não foi possível apagar a imagem.");
-      }
     }
 
     toast.success("Recado removido.");
@@ -327,11 +267,7 @@ export default function Home() {
   const { data: linksData } = useQuery({
     queryKey: ["app_links", "home"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("app_links")
-        .select("*")
-        .order("sort_order", { ascending: true });
-      if (error) throw error;
+      const data = await apiRequest<LinkItem[]>("/api/links");
       return data as LinkItem[];
     },
   });
@@ -350,7 +286,11 @@ export default function Home() {
 
   const handleLinkClick = async (link: LinkItem) => {
     if (link.id) {
-      await trackLinkClick(link.id);
+      try {
+        await apiRequest(`/api/links/${link.id}/click`, { method: "POST" });
+      } catch (error) {
+        console.error("Error tracking link click:", error);
+      }
     }
     window.open(link.url, "_blank", "noopener,noreferrer");
   };
@@ -429,7 +369,7 @@ export default function Home() {
                         size="icon"
                         variant="destructive"
                         className="h-8 w-8"
-                        onClick={() => void handleRemoveRecado(item.id, item.storagePath)}
+                        onClick={() => void handleRemoveRecado(item.id)}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>

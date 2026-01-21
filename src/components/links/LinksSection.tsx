@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/lib/supabase";
+import { apiRequest } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ExternalLink, Link2 } from "lucide-react";
@@ -58,12 +58,7 @@ export function LinksSection({
   const { data } = useQuery({
     queryKey: ["app_links", "sector", sector],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("app_links")
-        .select("*")
-        .order("sort_order", { ascending: true });
-      if (error) throw error;
-      return data as LinkItem[];
+      return apiRequest<LinkItem[]>("/api/links");
     },
   });
 

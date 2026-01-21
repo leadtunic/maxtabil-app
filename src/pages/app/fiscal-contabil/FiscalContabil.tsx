@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
-import { supabase } from "@/lib/supabase";
+import { apiRequest } from "@/lib/api";
 import { useActiveRuleSet } from "@/hooks/use-active-ruleset";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -53,12 +53,9 @@ export default function FiscalContabil() {
   const { data: simplesRuleSets } = useQuery({
     queryKey: ["rulesets", "simples_das", "list"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("rulesets")
-        .select("*")
-        .eq("simulator_key", "SIMPLES_DAS")
-        .order("version", { ascending: false });
-      if (error) throw error;
+      const data = await apiRequest<RuleSet[]>(
+        "/api/rulesets?simulatorKey=SIMPLES_DAS"
+      );
       return data as RuleSet[];
     },
   });

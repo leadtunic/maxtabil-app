@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/lib/supabase";
+import { apiRequest, apiUpload, buildApiUrl } from "@/lib/api";
 import { track, AnalyticsEvents } from "@/lib/analytics";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,13 +11,17 @@ import { AnimatedCard } from "@/components/ui/animated-card";
 import ProceduralGroundBackground from "@/components/ui/animated-pattern-cloud";
 import { toast } from "sonner";
 import { Loader2, Upload, Building2 } from "lucide-react";
-import type { ModuleKey, Workspace } from "@/types/supabase";
+import type { ModuleKey, Workspace, WorkspaceSettings, Entitlement } from "@/types/supabase";
 
-type SupabaseResponse<T> = {
-  data: T | null;
-  error: { message: string } | null;
+type WorkspaceBootstrapResponse = {
+  workspace: Workspace | null;
+  settings: WorkspaceSettings | null;
+  entitlement: Entitlement | null;
 };
 
+type UploadResponse = {
+  path?: string;
+};
 
 const AVAILABLE_MODULES: { key: ModuleKey; label: string; description: string }[] = [
   { key: "financeiro", label: "Financeiro - Honorários", description: "Simulador de honorários contábeis" },
@@ -29,12 +33,6 @@ const AVAILABLE_MODULES: { key: ModuleKey; label: string; description: string }[
   { key: "admin", label: "Administração", description: "Regras de cálculo, links e auditoria" },
 ];
 
-function generateSlug(email: string): string {
-  const base = email.split("@")[0].toLowerCase().replace(/[^a-z0-9]/g, "-");
-  const suffix = Math.random().toString(36).substring(2, 8);
-  return `${base}-${suffix}`;
-}
-
 export default function Onboarding() {
   const navigate = useNavigate();
   const {
@@ -42,9 +40,8 @@ export default function Onboarding() {
     refreshWorkspace,
     isAuthenticated,
     isLoading: authLoading,
-    user,
   } = useAuth();
-  
+
   const [step, setStep] = useState(1);
   const [workspaceName, setWorkspaceName] = useState(workspace?.name || "");
   const [logoFile, setLogoFile] = useState<File | null>(null);
@@ -86,7 +83,7 @@ export default function Onboarding() {
       setWorkspaceName(workspace.name);
     }
     if (workspace?.logo_path && !logoPreview) {
-      setLogoPreview(`/api/storage/workspace-logos/${workspace.logo_path}`);
+      setLogoPreview(buildApiUrl(`/api/storage/workspace-logos/${workspace.logo_path}`));
     }
   }, [workspace?.name, workspace?.logo_path, logoPreview]);
 
@@ -124,134 +121,66 @@ export default function Onboarding() {
     }));
   };
 
+  const ensureWorkspace = async (): Promise<Workspace | null> => {
+    if (workspace) return workspace;
+    const data = await withTimeout(
+      apiRequest<WorkspaceBootstrapResponse>("/api/workspace/bootstrap"),
+      "carregar workspace"
+    );
+    return data.workspace ?? null;
+  };
+
   const handleComplete = async () => {
     setIsLoading(true);
 
     try {
-      let activeWorkspace = workspace;
-      if (!activeWorkspace) {
-        if (!user) {
-          throw new Error("Sessão inválida. Faça login novamente.");
-        }
-
-        const currentUser = user;
-
-        const { data: existingWsList, error: existingWsError } = (await withTimeout(
-          supabase
-            .from("workspaces")
-            .select("*")
-            .eq("owner_user_id", currentUser.id)
-            .limit(1),
-          "buscar workspace"
-        )) as SupabaseResponse<Workspace[]>;
-
-        const existingWs = existingWsList?.[0] ?? null;
-
-        if (existingWsError || !existingWs) {
-          const email = currentUser.email || "user@example.com";
-          const displayName =
-            currentUser.user_metadata?.name ||
-            currentUser.user_metadata?.full_name ||
-            email.split("@")[0];
-
-          const { data: newWs, error: createError } = (await withTimeout(
-            supabase
-              .from("workspaces")
-              .insert({
-                owner_user_id: currentUser.id,
-                name: String(displayName),
-                slug: generateSlug(email),
-              })
-              .select()
-              .single(),
-            "criar workspace"
-          )) as SupabaseResponse<Workspace>;
-
-          if (createError || !newWs) {
-            throw createError || new Error("Não foi possível criar o workspace.");
-          }
-
-          await withTimeout(
-            supabase.from("entitlements").upsert({
-              workspace_id: newWs.id,
-              lifetime_access: false,
-            }),
-            "criar entitlement"
-          );
-
-          activeWorkspace = newWs;
-        } else {
-          activeWorkspace = existingWs;
-        }
-      }
-
+      const activeWorkspace = await ensureWorkspace();
       if (!activeWorkspace) {
         throw new Error("Workspace não encontrado. Recarregue a página.");
       }
 
-      const ensuredWorkspace = activeWorkspace;
       let logoPath: string | null = null;
 
-      // Upload logo if provided
       if (logoFile) {
-        const fileExt = logoFile.name.split(".").pop() || "png";
-        const fileName = `${ensuredWorkspace.id}/logo.${fileExt}`;
-
         try {
-          const { error: uploadError } = (await withTimeout(
-            supabase.storage.from("workspace-logos").upload(fileName, logoFile, { upsert: true }),
+          const formData = new FormData();
+          formData.append("file", logoFile);
+          const upload = await withTimeout(
+            apiUpload<UploadResponse>("/api/storage/workspace-logos", formData),
             "enviar a logo"
-          )) as SupabaseResponse<{ path: string }>;
-
-          if (uploadError) {
-            console.error("Logo upload error:", uploadError);
-            toast.error("Erro ao enviar logo", { description: uploadError.message });
-          } else {
-            logoPath = fileName;
+          );
+          if (upload?.path) {
+            logoPath = upload.path;
           }
         } catch (error) {
           const message = error instanceof Error ? error.message : "Erro desconhecido";
-          console.error("Logo upload timeout:", error);
+          console.error("Logo upload error:", error);
           toast.error("Erro ao enviar logo", { description: message });
         }
       }
 
-      // Update workspace name and logo
-      const { error: workspaceError } = (await withTimeout(
-        supabase
-          .from("workspaces")
-          .update({
-            name: workspaceName,
-            ...(logoPath && { logo_path: logoPath }),
-          })
-          .eq("id", ensuredWorkspace.id),
+      await withTimeout(
+        apiRequest<Workspace>("/api/workspace", {
+          method: "PUT",
+          body: {
+            name: workspaceName.trim(),
+            logoPath,
+          },
+        }),
         "atualizar o escritório"
-      )) as SupabaseResponse<Workspace>;
-        
-      if (workspaceError) {
-        throw workspaceError;
-      }
+      );
 
-      // Update settings
       const normalizedModules = normalizeEnabledModules(enabledModules);
-      const { error: settingsError } = (await withTimeout(
-        supabase
-          .from("workspace_settings")
-          .upsert(
-            {
-              workspace_id: ensuredWorkspace.id,
-              enabled_modules: normalizedModules,
-              completed_onboarding: true,
-              updated_at: new Date().toISOString(),
-            },
-            { onConflict: "workspace_id" }
-          ),
+      await withTimeout(
+        apiRequest<WorkspaceSettings>("/api/workspace/settings", {
+          method: "PUT",
+          body: {
+            enabledModules: normalizedModules,
+            completedOnboarding: true,
+          },
+        }),
         "salvar configurações"
-      )) as SupabaseResponse<{ workspace_id: string }>;
-        
-      if (settingsError) {
-        throw settingsError;
-      }
+      );
 
       track(AnalyticsEvents.ONBOARDING_COMPLETED, {
         modules_enabled: Object.entries(normalizedModules)
@@ -261,7 +190,7 @@ export default function Onboarding() {
       });
 
       await withTimeout(refreshWorkspace(), "recarregar o workspace");
-      
+
       toast.success("Configuração concluída!");
       navigate("/paywall");
     } catch (error) {
@@ -276,7 +205,7 @@ export default function Onboarding() {
   return (
     <div className="min-h-screen relative overflow-hidden flex items-center justify-center p-4">
       <ProceduralGroundBackground />
-      
+
       <div className="w-full max-w-xl">
         <AnimatedCard className="p-5">
           {/* Header */}

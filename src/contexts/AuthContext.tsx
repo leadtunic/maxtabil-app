@@ -7,7 +7,7 @@ import {
   useCallback,
   type ReactNode,
 } from "react";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { apiRequest } from "@/lib/api";
 import { logAudit } from "@/lib/audit";
 import { track, identify, AnalyticsEvents, resetAnalytics } from "@/lib/analytics";
 import type {
@@ -16,12 +16,36 @@ import type {
   Entitlement,
   ModuleKey,
 } from "@/types/supabase";
-import type { User, Session } from "@supabase/supabase-js";
+
+type AuthUser = {
+  id: string;
+  email: string;
+  name: string;
+  image?: string | null;
+  emailVerified?: boolean;
+};
+
+type AuthSession = {
+  id: string;
+  userId: string;
+  expiresAt: string;
+};
+
+type SessionResponse = {
+  session: AuthSession;
+  user: AuthUser;
+} | null;
+
+type WorkspaceBootstrapResponse = {
+  workspace: Workspace | null;
+  settings: WorkspaceSettings | null;
+  entitlement: Entitlement | null;
+};
 
 interface AuthContextType {
   // User & Session
-  user: User | null;
-  session: Session | null;
+  user: AuthUser | null;
+  session: AuthSession | null;
   isAuthenticated: boolean;
   isLoading: boolean;
 
@@ -49,123 +73,46 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-function generateSlug(email: string): string {
-  const base = email.split("@")[0].toLowerCase().replace(/[^a-z0-9]/g, "-");
-  const suffix = Math.random().toString(36).substring(2, 8);
-  return `${base}-${suffix}`;
-}
-
-function isRefreshTokenError(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  const maybeError = error as { message?: string; code?: string };
-  const message = (maybeError.message ?? "").toLowerCase();
-  const code = (maybeError.code ?? "").toString().toLowerCase();
-  return message.includes("refresh_token_not_found") || code.includes("refresh_token_not_found");
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
-  const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<AuthSession | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [settings, setSettings] = useState<WorkspaceSettings | null>(null);
   const [entitlement, setEntitlement] = useState<Entitlement | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const clearState = useCallback(() => {
+    setSession(null);
+    setUser(null);
+    setWorkspace(null);
+    setSettings(null);
+    setEntitlement(null);
+  }, []);
+
   const fetchWorkspaceData = useCallback(async (userId: string) => {
     try {
-    // Try to find existing workspace (avoid 406 by returning a list)
-    const { data: existingWsList, error: wsError } = await supabase
-      .from("workspaces")
-      .select("*")
-      .eq("owner_user_id", userId)
-      .limit(1);
+      const data = await apiRequest<WorkspaceBootstrapResponse>("/api/workspace/bootstrap");
 
-    let ws: Workspace | null = existingWsList?.[0] ?? null;
-
-    // If no workspace exists, create one
-    if (wsError || !ws) {
-      const { data: userData } = await supabase.auth.getUser();
-      const email = userData?.user?.email || "user@example.com";
-      const displayName = userData?.user?.user_metadata?.name || 
-                          userData?.user?.user_metadata?.full_name || 
-                          email.split("@")[0];
-      
-      const { data: newWs, error: createError } = await supabase
-        .from("workspaces")
-        .insert({
-          owner_user_id: userId,
-          name: String(displayName),
-          slug: generateSlug(email),
-        })
-        .select()
-        .single();
-
-      if (createError || !newWs) {
-        console.error("Error creating workspace:", createError);
-        setIsLoading(false);
-        return;
+      if (!data?.workspace) {
+        setWorkspace(null);
+        setSettings(null);
+        setEntitlement(null);
+        return null;
       }
 
-      const workspaceId = newWs.id;
-      ws = newWs;
+      setWorkspace(data.workspace);
+      setSettings(data.settings);
+      setEntitlement(data.entitlement);
 
-      // Create default settings
-      await supabase.from("workspace_settings").insert({
-        workspace_id: workspaceId,
-        enabled_modules: {
-          financeiro: true,
-          financeiro_bpo: true,
-          dp: true,
-          fiscal_contabil: true,
-          legalizacao: true,
-          certificado_digital: true,
-          admin: true,
-        },
-        completed_onboarding: false,
+      identify(userId, {
+        email: data.workspace.name,
+        workspace_id: data.workspace.id,
+        workspace_name: data.workspace.name,
       });
-
-      // Create entitlement record
-      await supabase.from("entitlements").insert({
-        workspace_id: workspaceId,
-        lifetime_access: false,
-      });
-    }
-
-    if (!ws) {
-      setIsLoading(false);
-      return;
-    }
-
-    setWorkspace(ws);
-
-    // Fetch settings
-    const { data: settingsList } = await supabase
-      .from("workspace_settings")
-      .select("*")
-      .eq("workspace_id", ws.id)
-      .limit(1);
-
-    const settingsData = settingsList?.[0] ?? null;
-    if (settingsData) setSettings(settingsData);
-
-    // Fetch entitlement
-    const { data: entitlementList } = await supabase
-      .from("entitlements")
-      .select("*")
-      .eq("workspace_id", ws.id)
-      .limit(1);
-
-    const entitlementData = entitlementList?.[0] ?? null;
-    if (entitlementData) setEntitlement(entitlementData);
-
-    // Identify user in analytics
-    identify(userId, {
-      email: ws.name,
-      workspace_id: ws.id,
-      workspace_name: ws.name,
-    });
+      return data;
     } catch (error) {
       console.error("[Auth] Error loading workspace data:", error);
+      return null;
     }
   }, []);
 
@@ -175,109 +122,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [user, fetchWorkspaceData]);
 
   const isEmailAllowed = useCallback(async (email: string): Promise<boolean> => {
-    if (!isSupabaseConfigured) return false;
     const normalizedEmail = email.trim().toLowerCase();
-    const { data, error } = await supabase.rpc("is_email_allowed", {
-      email_input: normalizedEmail,
-    });
-    if (error) {
+    if (!normalizedEmail) return false;
+
+    try {
+      const data = await apiRequest<{ allowed: boolean }>(
+        `/api/allowlist/check?email=${encodeURIComponent(normalizedEmail)}`
+      );
+      return Boolean(data?.allowed);
+    } catch (error) {
       console.error("[Auth] allowlist check failed:", error);
       return false;
     }
-    return Boolean(data);
   }, []);
+
+  const loadSession = useCallback(async () => {
+    try {
+      const sessionData = await apiRequest<SessionResponse>("/api/auth/get-session");
+
+      if (!sessionData?.user) {
+        clearState();
+        return null;
+      }
+
+      setSession(sessionData.session);
+      setUser(sessionData.user);
+      await fetchWorkspaceData(sessionData.user.id);
+      return sessionData;
+    } catch (error) {
+      console.error("[Auth] Error initializing auth:", error);
+      clearState();
+      return null;
+    }
+  }, [clearState, fetchWorkspaceData]);
 
   useEffect(() => {
     let mounted = true;
 
     const initAuth = async () => {
-      // If Supabase is not configured, just mark as not loading
-      if (!isSupabaseConfigured) {
-        console.warn("[Auth] Supabase not configured. Running in demo mode.");
-        if (mounted) setIsLoading(false);
-        return;
-      }
-
-      try {
-        // Clear any corrupted session data first
-        const storedSession = localStorage.getItem('sb-visjvmdzjucfbroekqvc-auth-token');
-        if (storedSession) {
-          try {
-            JSON.parse(storedSession);
-          } catch {
-            console.warn("[Auth] Corrupted session data, clearing...");
-            localStorage.removeItem('sb-visjvmdzjucfbroekqvc-auth-token');
-          }
-        }
-
-        const { data: { session: initialSession }, error } = await supabase.auth.getSession();
-
-        if (!mounted) return;
-
-        if (error) {
-          console.warn("[Auth] Session error:", error);
-          if (isRefreshTokenError(error)) {
-            await supabase.auth.signOut({ scope: "local" });
-            setSession(null);
-            setUser(null);
-            setWorkspace(null);
-            setSettings(null);
-            setEntitlement(null);
-          }
-        }
-
-        if (initialSession?.user) {
-          setSession(initialSession);
-          setUser(initialSession.user);
-          await fetchWorkspaceData(initialSession.user.id);
-        }
-      } catch (error) {
-        console.error("[Auth] Error initializing auth:", error);
-        // Clear session on any critical error
-        try {
-          await supabase.auth.signOut({ scope: "local" });
-        } catch {
-          // Ignore signout errors
-        }
-        setSession(null);
-        setUser(null);
-        setWorkspace(null);
-        setSettings(null);
-        setEntitlement(null);
-      } finally {
-        if (mounted) setIsLoading(false);
-      }
+      await loadSession();
+      if (mounted) setIsLoading(false);
     };
 
     initAuth();
 
-    // Don't set up subscription if Supabase not configured
-    if (!isSupabaseConfigured) {
-      return;
-    }
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, newSession) => {
-        if (!mounted) return;
-        
-        setSession(newSession);
-        setUser(newSession?.user ?? null);
-
-        if (newSession?.user) {
-          await fetchWorkspaceData(newSession.user.id);
-        } else {
-          setWorkspace(null);
-          setSettings(null);
-          setEntitlement(null);
-        }
-      }
-    );
-
     return () => {
       mounted = false;
-      subscription.unsubscribe();
     };
-  }, [fetchWorkspaceData]);
+  }, [loadSession]);
 
   const login = useCallback(
     async (email: string, password: string) => {
@@ -286,21 +178,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { success: false, error: "E-mail não autorizado para acesso." };
       }
 
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      try {
+        await apiRequest("/api/auth/sign-in/email", {
+          method: "POST",
+          body: { email, password },
+        });
 
-      if (error || !data.user) {
-        return { success: false, error: error?.message || "Credenciais inválidas" };
+        const sessionData = await loadSession();
+        track(AnalyticsEvents.AUTH_LOGIN_SUCCESS, { method: "email" });
+        await logAudit(
+          "LOGIN_SUCCESS",
+          "auth",
+          sessionData?.user?.id ?? null,
+          { email },
+          null
+        );
+
+        return { success: true };
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : "Credenciais inválidas",
+        };
       }
-
-      track(AnalyticsEvents.AUTH_LOGIN_SUCCESS, { method: "email" });
-      await logAudit("LOGIN_SUCCESS", "auth", data.user.id, { email });
-
-      return { success: true };
     },
-    [isEmailAllowed]
+    [isEmailAllowed, loadSession]
   );
 
   const signUp = useCallback(
@@ -310,52 +212,67 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { success: false, error: "E-mail não autorizado para cadastro." };
       }
 
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: { name: name || email.split("@")[0] },
-        },
-      });
+      const displayName = name || email.split("@")[0];
 
-      if (error) {
-        return { success: false, error: error.message };
-      }
+      try {
+        const response = await apiRequest<{ token?: string | null }>("/api/auth/sign-up/email", {
+          method: "POST",
+          body: {
+            name: displayName,
+            email,
+            password,
+          },
+        });
 
-      if (data.user) {
         track(AnalyticsEvents.AUTH_SIGNUP_SUCCESS, { method: "email" });
-      }
 
-      return { success: true, requiresEmailConfirmation: !data.session };
+        if (response?.token) {
+          await loadSession();
+        }
+
+        return {
+          success: true,
+          requiresEmailConfirmation: !response?.token,
+        };
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : "Erro ao criar conta",
+        };
+      }
     },
-    [isEmailAllowed]
+    [isEmailAllowed, loadSession]
   );
 
   const loginWithGoogle = useCallback(async () => {
-    const redirectUrl = `${window.location.origin}/app`;
-    
-    await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: redirectUrl,
+    const callbackURL = `${window.location.origin}/app`;
+
+    const response = await apiRequest<{ url?: string }>("/api/auth/sign-in/social", {
+      method: "POST",
+      body: {
+        provider: "google",
+        callbackURL,
+        disableRedirect: true,
       },
     });
+
+    if (!response?.url) {
+      throw new Error("Não foi possível iniciar o login com Google.");
+    }
+
+    window.location.href = response.url;
   }, []);
 
   const logout = useCallback(async () => {
     track(AnalyticsEvents.AUTH_LOGOUT);
     resetAnalytics();
     try {
-      await supabase.auth.signOut({ scope: "local" });
+      await apiRequest("/api/auth/sign-out", { method: "POST" });
     } catch (error) {
       console.error("[Auth] Error during logout:", error);
     }
-    setSession(null);
-    setUser(null);
-    setWorkspace(null);
-    setSettings(null);
-    setEntitlement(null);
-  }, []);
+    clearState();
+  }, [clearState]);
 
   const hasModule = useCallback(
     (moduleKey: ModuleKey): boolean => {

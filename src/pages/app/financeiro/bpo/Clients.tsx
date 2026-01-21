@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/lib/supabase";
+import { apiRequest } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -85,13 +85,7 @@ export default function BpoClients() {
     if (!workspace) return;
 
     try {
-      const { data, error } = await supabase
-        .from("bpo_clients")
-        .select("*")
-        .eq("workspace_id", workspace.id)
-        .order("name");
-
-      if (error) throw error;
+      const data = await apiRequest<BpoClient[]>("/api/bpo/clients");
       setClients(data || []);
     } catch (error) {
       console.error("Error fetching clients:", error);
@@ -152,9 +146,9 @@ export default function BpoClients() {
     try {
       if (editingClient) {
         // Update existing
-        const { error } = await supabase
-          .from("bpo_clients")
-          .update({
+        await apiRequest(`/api/bpo/clients/${editingClient.id}`, {
+          method: "PUT",
+          body: {
             name: formData.name,
             document: formData.document || null,
             contact_name: formData.contact_name || null,
@@ -162,26 +156,23 @@ export default function BpoClients() {
             contact_phone: formData.contact_phone || null,
             notes: formData.notes || null,
             is_active: formData.is_active,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", editingClient.id);
-
-        if (error) throw error;
+          },
+        });
         toast.success("Cliente atualizado!");
       } else {
         // Create new
-        const { error } = await supabase.from("bpo_clients").insert({
-          workspace_id: workspace.id,
-          name: formData.name,
-          document: formData.document || null,
-          contact_name: formData.contact_name || null,
-          contact_email: formData.contact_email || null,
-          contact_phone: formData.contact_phone || null,
-          notes: formData.notes || null,
-          is_active: formData.is_active,
+        await apiRequest("/api/bpo/clients", {
+          method: "POST",
+          body: {
+            name: formData.name,
+            document: formData.document || null,
+            contact_name: formData.contact_name || null,
+            contact_email: formData.contact_email || null,
+            contact_phone: formData.contact_phone || null,
+            notes: formData.notes || null,
+            is_active: formData.is_active,
+          },
         });
-
-        if (error) throw error;
         toast.success("Cliente criado!");
       }
 
@@ -199,12 +190,7 @@ export default function BpoClients() {
     if (!confirm(`Tem certeza que deseja excluir "${client.name}"?`)) return;
 
     try {
-      const { error } = await supabase
-        .from("bpo_clients")
-        .delete()
-        .eq("id", client.id);
-
-      if (error) throw error;
+      await apiRequest(`/api/bpo/clients/${client.id}`, { method: "DELETE" });
       toast.success("Cliente excluído!");
       fetchClients();
     } catch (error) {

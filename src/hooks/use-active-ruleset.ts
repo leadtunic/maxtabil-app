@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/lib/supabase";
+import { apiRequest } from "@/lib/api";
 import { getDefaultPayload } from "@/lib/rulesets";
 import type { RuleSet, RuleSetKey } from "@/types";
 
@@ -7,18 +7,11 @@ export function useActiveRuleSet(simulatorKey: RuleSetKey) {
   return useQuery({
     queryKey: ["rulesets", "active", simulatorKey],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("rulesets")
-        .select("*")
-        .eq("simulator_key", simulatorKey)
-        .eq("is_active", true)
-        .maybeSingle();
+      const response = await apiRequest<{ ruleset: RuleSet | null }>(
+        `/api/rulesets/active?simulatorKey=${encodeURIComponent(simulatorKey)}`
+      );
 
-      if (error) {
-        throw error;
-      }
-
-      if (!data) {
+      if (!response?.ruleset) {
         return {
           ruleset: null,
           payload: getDefaultPayload(simulatorKey),
@@ -27,8 +20,8 @@ export function useActiveRuleSet(simulatorKey: RuleSetKey) {
       }
 
       return {
-        ruleset: data as RuleSet,
-        payload: data.payload as Record<string, unknown>,
+        ruleset: response.ruleset as RuleSet,
+        payload: response.ruleset.payload as Record<string, unknown>,
         isFallback: false,
       };
     },

@@ -26,3 +26,4 @@ intranet-esco-app/.env.*
 *.njsproj
 *.sln
 *.sw?
+*.md

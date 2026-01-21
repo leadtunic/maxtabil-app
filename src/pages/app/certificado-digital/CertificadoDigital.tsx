@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/lib/supabase";
+import { apiRequest } from "@/lib/api";
 import { logAudit } from "@/lib/audit";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -39,11 +39,7 @@ export default function CertificadoDigital() {
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["digital_certs"],
     queryFn: async () => {
-      const { data: rows, error } = await supabase
-        .from("digital_certs")
-        .select("*")
-        .order("expiry_date", { ascending: true });
-      if (error) throw error;
+      const rows = await apiRequest<DigitalCert[]>("/api/digital-certs");
       return rows as DigitalCert[];
     },
   });
@@ -118,53 +114,49 @@ export default function CertificadoDigital() {
       return;
     }
 
-    if (editingCert) {
-      const { error } = await supabase
-        .from("digital_certs")
-        .update({
+    try {
+      if (editingCert) {
+        await apiRequest(`/api/digital-certs/${editingCert.id}`, {
+          method: "PUT",
+          body: {
+            client_name: formData.client_name,
+            cnpj: formData.cnpj || null,
+            cert_type: formData.cert_type,
+            provider: formData.provider || null,
+            expiry_date: formData.expiry_date,
+            notes: formData.notes || null,
+            attachment_url: formData.attachment_url || null,
+          },
+        });
+
+        await logAudit("DIGITAL_CERT_UPSERT", "digital_certs", editingCert.id, {
           client_name: formData.client_name,
-          cnpj: formData.cnpj || null,
-          cert_type: formData.cert_type,
-          provider: formData.provider || null,
-          expiry_date: formData.expiry_date,
-          notes: formData.notes || null,
-          attachment_url: formData.attachment_url || null,
-        })
-        .eq("id", editingCert.id);
+        });
+        toast.success("Certificado atualizado.");
+      } else {
+        const inserted = await apiRequest<DigitalCert>("/api/digital-certs", {
+          method: "POST",
+          body: {
+            client_name: formData.client_name,
+            cnpj: formData.cnpj || null,
+            cert_type: formData.cert_type,
+            provider: formData.provider || null,
+            expiry_date: formData.expiry_date,
+            notes: formData.notes || null,
+            attachment_url: formData.attachment_url || null,
+          },
+        });
 
-      if (error) {
-        toast.error("Não foi possível atualizar.");
-        return;
-      }
-
-      await logAudit("DIGITAL_CERT_UPSERT", "digital_certs", editingCert.id, {
-        client_name: formData.client_name,
-      });
-      toast.success("Certificado atualizado.");
-    } else {
-      const { data: inserted, error } = await supabase
-        .from("digital_certs")
-        .insert({
+        await logAudit("DIGITAL_CERT_UPSERT", "digital_certs", inserted?.id ?? null, {
           client_name: formData.client_name,
-          cnpj: formData.cnpj || null,
-          cert_type: formData.cert_type,
-          provider: formData.provider || null,
-          expiry_date: formData.expiry_date,
-          notes: formData.notes || null,
-          attachment_url: formData.attachment_url || null,
-        })
-        .select("id")
-        .single();
-
-      if (error) {
-        toast.error("Não foi possível criar.");
-        return;
+        });
+        toast.success("Certificado registrado.");
       }
-
-      await logAudit("DIGITAL_CERT_UPSERT", "digital_certs", inserted?.id ?? null, {
-        client_name: formData.client_name,
+    } catch (error) {
+      toast.error("Não foi possível salvar.", {
+        description: error instanceof Error ? error.message : undefined,
       });
-      toast.success("Certificado registrado.");
+      return;
     }
 
     setDialogOpen(false);
@@ -173,9 +165,12 @@ export default function CertificadoDigital() {
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
-    const { error } = await supabase.from("digital_certs").delete().eq("id", deleteTarget.id);
-    if (error) {
-      toast.error("Não foi possível excluir.");
+    try {
+      await apiRequest(`/api/digital-certs/${deleteTarget.id}`, { method: "DELETE" });
+    } catch (error) {
+      toast.error("Não foi possível excluir.", {
+        description: error instanceof Error ? error.message : undefined,
+      });
       return;
     }
     await logAudit("DIGITAL_CERT_DELETED", "digital_certs", deleteTarget.id, {});

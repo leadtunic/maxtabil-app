@@ -29,7 +29,7 @@ export function AppTopbar() {
     navigate("/app/configuracoes");
   };
 
-  const displayName = user?.user_metadata?.full_name || user?.email?.split("@")[0] || "Usuário";
+  const displayName = user?.name || user?.email?.split("@")[0] || "Usuário";
   const initials = displayName
     .split(" ")
     .map((n: string) => n[0])

@@ -33,6 +33,7 @@ import {
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
+import { buildApiUrl } from "@/lib/api";
 
 const mainNav = [
   { title: "Início", url: "/app", icon: Home },
@@ -111,9 +112,7 @@ export function AppSidebar() {
   // Get workspace logo URL
   const getLogoUrl = () => {
     if (workspace?.logo_path) {
-      // Use Supabase storage URL
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      return `${supabaseUrl}/storage/v1/object/public/workspace-logos/${workspace.logo_path}`;
+      return buildApiUrl(`/api/storage/workspace-logos/${workspace.logo_path}`);
     }
     return "/logo.svg";
   };

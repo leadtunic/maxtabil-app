@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/lib/supabase";
+import { apiRequest } from "@/lib/api";
 import { logAudit } from "@/lib/audit";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -47,11 +47,7 @@ export default function Legalizacao() {
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["legal_docs"],
     queryFn: async () => {
-      const { data: rows, error } = await supabase
-        .from("legal_docs")
-        .select("*")
-        .order("expiry_date", { ascending: true });
-      if (error) throw error;
+      const rows = await apiRequest<LegalDoc[]>("/api/legal-docs");
       return rows as LegalDoc[];
     },
   });
@@ -127,53 +123,49 @@ export default function Legalizacao() {
       return;
     }
 
-    if (editingDoc) {
-      const { error } = await supabase
-        .from("legal_docs")
-        .update({
+    try {
+      if (editingDoc) {
+        await apiRequest(`/api/legal-docs/${editingDoc.id}`, {
+          method: "PUT",
+          body: {
+            client_name: formData.client_name,
+            cnpj: formData.cnpj || null,
+            doc_type: formData.doc_type,
+            issue_date: formData.issue_date || null,
+            expiry_date: formData.expiry_date,
+            notes: formData.notes || null,
+            attachment_url: formData.attachment_url || null,
+          },
+        });
+
+        await logAudit("LEGAL_DOC_UPSERT", "legal_docs", editingDoc.id, {
           client_name: formData.client_name,
-          cnpj: formData.cnpj || null,
-          doc_type: formData.doc_type,
-          issue_date: formData.issue_date || null,
-          expiry_date: formData.expiry_date,
-          notes: formData.notes || null,
-          attachment_url: formData.attachment_url || null,
-        })
-        .eq("id", editingDoc.id);
+        });
+        toast.success("Documento atualizado.");
+      } else {
+        const inserted = await apiRequest<LegalDoc>("/api/legal-docs", {
+          method: "POST",
+          body: {
+            client_name: formData.client_name,
+            cnpj: formData.cnpj || null,
+            doc_type: formData.doc_type,
+            issue_date: formData.issue_date || null,
+            expiry_date: formData.expiry_date,
+            notes: formData.notes || null,
+            attachment_url: formData.attachment_url || null,
+          },
+        });
 
-      if (error) {
-        toast.error("Não foi possível atualizar.");
-        return;
-      }
-
-      await logAudit("LEGAL_DOC_UPSERT", "legal_docs", editingDoc.id, {
-        client_name: formData.client_name,
-      });
-      toast.success("Documento atualizado.");
-    } else {
-      const { data: inserted, error } = await supabase
-        .from("legal_docs")
-        .insert({
+        await logAudit("LEGAL_DOC_UPSERT", "legal_docs", inserted?.id ?? null, {
           client_name: formData.client_name,
-          cnpj: formData.cnpj || null,
-          doc_type: formData.doc_type,
-          issue_date: formData.issue_date || null,
-          expiry_date: formData.expiry_date,
-          notes: formData.notes || null,
-          attachment_url: formData.attachment_url || null,
-        })
-        .select("id")
-        .single();
-
-      if (error) {
-        toast.error("Não foi possível criar.");
-        return;
+        });
+        toast.success("Documento registrado.");
       }
-
-      await logAudit("LEGAL_DOC_UPSERT", "legal_docs", inserted?.id ?? null, {
-        client_name: formData.client_name,
+    } catch (error) {
+      toast.error("Não foi possível salvar.", {
+        description: error instanceof Error ? error.message : undefined,
       });
-      toast.success("Documento registrado.");
+      return;
     }
 
     setDialogOpen(false);
@@ -182,9 +174,12 @@ export default function Legalizacao() {
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
-    const { error } = await supabase.from("legal_docs").delete().eq("id", deleteTarget.id);
-    if (error) {
-      toast.error("Não foi possível excluir.");
+    try {
+      await apiRequest(`/api/legal-docs/${deleteTarget.id}`, { method: "DELETE" });
+    } catch (error) {
+      toast.error("Não foi possível excluir.", {
+        description: error instanceof Error ? error.message : undefined,
+      });
       return;
     }
     await logAudit("LEGAL_DOC_DELETED", "legal_docs", deleteTarget.id, {});

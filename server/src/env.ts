@@ -1,0 +1,13 @@
+export const env = {
+  nodeEnv: process.env.NODE_ENV ?? "development",
+  port: Number(process.env.PORT ?? 3001),
+  databaseUrl: process.env.DATABASE_URL ?? "",
+  appBaseUrl: process.env.APP_BASE_URL ?? "",
+  authBaseUrl: process.env.BETTER_AUTH_BASE_URL ?? "",
+  authSecret: process.env.BETTER_AUTH_SECRET ?? "",
+  abacatePayApiKey: process.env.ABACATEPAY_API_KEY ?? "",
+  uploadsDir: process.env.UPLOADS_DIR ?? "",
+  googleClientId: process.env.GOOGLE_OAUTH_CLIENT_ID ?? "",
+  googleClientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET ?? "",
+  googleRedirectUri: process.env.GOOGLE_OAUTH_REDIRECT_URI ?? "",
+};

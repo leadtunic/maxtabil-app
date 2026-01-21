@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/lib/supabase";
+import { apiRequest } from "@/lib/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -37,48 +37,8 @@ export default function BpoDashboard() {
       if (!workspace) return;
 
       try {
-        // Fetch clients
-        const { data: clients } = await supabase
-          .from("bpo_clients")
-          .select("id, is_active")
-          .eq("workspace_id", workspace.id);
-
-        // Fetch tasks
-        const { data: tasks } = await supabase
-          .from("bpo_tasks")
-          .select("id, status, due_date, completed_at")
-          .eq("workspace_id", workspace.id);
-
-        const now = new Date();
-        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-
-        const totalClients = clients?.length || 0;
-        const activeClients = clients?.filter((c) => c.is_active).length || 0;
-        const totalTasks = tasks?.length || 0;
-        const pendingTasks = tasks?.filter((t) => t.status === "pendente").length || 0;
-        const completedTasks = tasks?.filter((t) => t.status === "concluido").length || 0;
-        const overdueTasks = tasks?.filter(
-          (t) =>
-            t.status !== "concluido" &&
-            t.due_date &&
-            new Date(t.due_date) < now
-        ).length || 0;
-        const tasksCompletedThisMonth = tasks?.filter(
-          (t) =>
-            t.status === "concluido" &&
-            t.completed_at &&
-            new Date(t.completed_at) >= startOfMonth
-        ).length || 0;
-
-        setStats({
-          totalClients,
-          activeClients,
-          totalTasks,
-          pendingTasks,
-          completedTasks,
-          overdueTasks,
-          tasksCompletedThisMonth,
-        });
+        const data = await apiRequest<BpoDashboardStats>("/api/bpo/summary");
+        setStats(data);
       } catch (error) {
         console.error("Error fetching stats:", error);
       } finally {
