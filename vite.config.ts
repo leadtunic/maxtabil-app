@@ -9,7 +9,11 @@ export default defineConfig(() => ({
     port: 8080,
   },
   preview: {
-    allowedHosts: ["maxtabil-app-l77mzo-cde458-76-13-70-153.traefik.me"],
+    allowedHosts: [
+      "maxtabil-app-l77mzo-cde458-76-13-70-153.traefik.me",
+      "maxtabil.com.br",
+      "www.maxtabil.com.br",
+    ],
   },
   build: {
     chunkSizeWarningLimit: 1000,
