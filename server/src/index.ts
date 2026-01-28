@@ -8,9 +8,9 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import { createWriteStream } from "node:fs";
 import { pipeline } from "node:stream/promises";
-import { auth } from "./auth";
-import { env } from "./env";
-import { sql } from "./db";
+import { auth } from "./auth.js";
+import { env } from "./env.js";
+import { sql } from "./db.js";
 
 type AuthUser = {
   id: string;
@@ -32,6 +32,18 @@ type AuthSessionResponse = {
 } | null;
 
 const app = Fastify({ logger: true });
+
+type MultipartFieldLike = { value?: unknown } | Array<{ value?: unknown }>;
+
+const readMultipartFieldValue = (field?: MultipartFieldLike): string | undefined => {
+  if (!field) return undefined;
+  if (Array.isArray(field)) {
+    const value = field[0]?.value;
+    return typeof value === "string" ? value : undefined;
+  }
+  const value = field.value;
+  return typeof value === "string" ? value : undefined;
+};
 
 const allowedOrigins = (() => {
   const origins = new Set<string>();
@@ -119,7 +131,7 @@ const getSessionFromRequest = async (request: FastifyRequest, reply: FastifyRepl
       returnHeaders: true,
     });
     if (result?.headers) {
-      result.headers.forEach((value, key) => {
+      result.headers.forEach((value: string, key: string) => {
         reply.header(key, value);
       });
     }
@@ -1027,9 +1039,7 @@ app.post("/api/home-recados", async (request, reply) => {
     `)[0]?.next ?? 1
   );
 
-  const titleField = file.fields?.title;
-  const providedTitle =
-    typeof titleField?.value === "string" ? titleField.value.trim() : undefined;
+  const providedTitle = readMultipartFieldValue(file.fields?.title)?.trim();
   const title = providedTitle || file.filename || `Recado ${nextOrder}`;
 
   let inserted;
@@ -1489,17 +1499,17 @@ app.get("/api/bpo/summary", async (request, reply) => {
     return;
   }
 
-  const clients = await sql`
+  const clients = (await sql`
     select is_active
     from bpo_clients
     where workspace_id = ${workspace.id}
-  `;
+  `) as Array<{ is_active: boolean }>;
 
-  const tasks = await sql`
+  const tasks = (await sql`
     select status, due_date, completed_at
     from bpo_tasks
     where workspace_id = ${workspace.id}
-  `;
+  `) as Array<{ status: string; due_date: string | null; completed_at: string | null }>;
 
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -2085,7 +2095,17 @@ app.post("/api/billing/lifetime", async (request, reply) => {
     return;
   }
 
-  const billingResult = await abacateResponse.json().catch(() => null);
+  const billingResult = (await abacateResponse.json().catch(() => null)) as
+    | {
+        id?: string;
+        url?: string;
+        data?: {
+          id?: string;
+          url?: string;
+          paymentUrl?: string;
+        };
+      }
+    | null;
   const billingId = billingResult?.data?.id || billingResult?.id || null;
   const paymentUrl = billingResult?.data?.url || billingResult?.url || billingResult?.data?.paymentUrl;
 
