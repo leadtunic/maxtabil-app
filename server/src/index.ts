@@ -10,7 +10,7 @@ import { createWriteStream } from "node:fs";
 import { pipeline } from "node:stream/promises";
 import { auth } from "./auth.js";
 import { env } from "./env.js";
-import { sql } from "./db.js";
+import { sql } from "./db/index.js";
 
 type AuthUser = {
   id: string;
@@ -23,7 +23,7 @@ type AuthUser = {
 type AuthSession = {
   id: string;
   userId: string;
-  expiresAt: string;
+  expiresAt: string | Date;
 };
 
 type AuthSessionResponse = {
@@ -33,16 +33,22 @@ type AuthSessionResponse = {
 
 const app = Fastify({ logger: true });
 
-type MultipartFieldLike = { value?: unknown } | Array<{ value?: unknown }>;
-
-const readMultipartFieldValue = (field?: MultipartFieldLike): string | undefined => {
+const readMultipartFieldValue = (field: unknown): string | undefined => {
   if (!field) return undefined;
   if (Array.isArray(field)) {
-    const value = field[0]?.value;
+    for (const item of field) {
+      if (item && typeof item === "object" && "value" in item) {
+        const value = (item as { value?: unknown }).value;
+        if (typeof value === "string") return value;
+      }
+    }
+    return undefined;
+  }
+  if (typeof field === "object" && "value" in field) {
+    const value = (field as { value?: unknown }).value;
     return typeof value === "string" ? value : undefined;
   }
-  const value = field.value;
-  return typeof value === "string" ? value : undefined;
+  return undefined;
 };
 
 const allowedOrigins = (() => {

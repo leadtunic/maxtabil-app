@@ -1,6 +1,6 @@
 import { betterAuth } from "better-auth/minimal";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { db } from "./db.js";
+import { db } from "./db/index.js";
 import { env } from "./env.js";
 
 const googleEnabled = Boolean(env.googleClientId && env.googleClientSecret);
