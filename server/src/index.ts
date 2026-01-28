@@ -105,15 +105,6 @@ app.addHook("onRequest", (request, reply, done) => {
   done();
 });
 
-app.options("/*", async (request, reply) => {
-  const origin = request.headers.origin;
-  if (!applyCorsHeaders(reply, typeof origin === "string" ? origin : undefined)) {
-    reply.status(403).send({ error: "CORS_BLOCKED" });
-    return;
-  }
-  reply.status(204).send();
-});
-
 await app.register(cors, {
   origin: allowedOrigins,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
@@ -155,15 +146,6 @@ const generateFileId = () => {
 };
 
 const authHandler = toNodeHandler(auth);
-
-app.options("/api/auth/*", async (request, reply) => {
-  const origin = request.headers.origin;
-  if (!applyCorsHeaders(reply, origin)) {
-    reply.status(403).send({ error: "CORS_BLOCKED" });
-    return;
-  }
-  reply.status(204).send();
-});
 
 app.all("/api/auth/*", async (request, reply) => {
   const origin = request.headers.origin;
