@@ -33,6 +33,10 @@ type AuthSessionResponse = {
 
 const app = Fastify({ logger: true });
 
+type JsonValue = string | number | boolean | null | { [key: string]: JsonValue } | JsonValue[];
+
+const asJsonValue = (value: unknown): JsonValue => value as JsonValue;
+
 const readMultipartFieldValue = (field: unknown): string | undefined => {
   if (!field) return undefined;
   if (Array.isArray(field)) {
@@ -558,7 +562,7 @@ app.post("/api/rulesets", async (request, reply) => {
       ${name},
       ${body.version},
       ${body.isActive ?? false},
-      ${sql.json(body.payload)},
+      ${sql.json(asJsonValue(body.payload))},
       ${workspace.id},
       ${sessionData.user.id}
     )
@@ -599,7 +603,7 @@ app.put("/api/rulesets/:id", async (request, reply) => {
   const updated = (await sql`
     update rulesets
     set name = ${name ? name : sql`name`},
-        payload = ${sql.json(body.payload)},
+        payload = ${sql.json(asJsonValue(body.payload))},
         updated_at = ${new Date()}
     where id = ${id}
       and (workspace_id = ${workspace.id} or workspace_id is null)
@@ -1710,7 +1714,7 @@ app.post("/api/admin/users", async (request, reply) => {
       ${"USER_CREATED"},
       ${"profiles"},
       ${createdUser.id},
-      ${sql.json({ email, role })}
+      ${sql.json(asJsonValue({ email, role }))} 
     )
   `;
 
@@ -1768,7 +1772,7 @@ app.post("/api/admin/users/:id/reset-password", async (request, reply) => {
       ${"USER_PASSWORD_RESET"},
       ${"profiles"},
       ${id},
-      ${sql.json({})}
+      ${sql.json(asJsonValue({}))}
     )
   `;
 
@@ -1818,7 +1822,7 @@ app.post("/api/admin/users/:id/disable", async (request, reply) => {
       ${"USER_DISABLED"},
       ${"profiles"},
       ${id},
-      ${sql.json({})}
+      ${sql.json(asJsonValue({}))}
     )
   `;
 
@@ -1865,7 +1869,7 @@ app.post("/api/admin/users/:id/enable", async (request, reply) => {
       ${"USER_ENABLED"},
       ${"profiles"},
       ${id},
-      ${sql.json({})}
+      ${sql.json(asJsonValue({}))}
     )
   `;
 
@@ -1912,7 +1916,7 @@ app.delete("/api/admin/users/:id", async (request, reply) => {
       ${"USER_DELETED"},
       ${"profiles"},
       ${id},
-      ${sql.json({})}
+      ${sql.json(asJsonValue({}))}
     )
   `;
 
@@ -2019,7 +2023,7 @@ app.put("/api/workspace/settings", async (request, reply) => {
   const updatedAt = new Date();
   const settings = (await sql`
     insert into workspace_settings (workspace_id, enabled_modules, completed_onboarding, updated_at)
-    values (${workspace.id}, ${sql.json(body.enabledModules)}, ${body.completedOnboarding ?? false}, ${updatedAt})
+    values (${workspace.id}, ${sql.json(asJsonValue(body.enabledModules))}, ${body.completedOnboarding ?? false}, ${updatedAt})
     on conflict (workspace_id) do update set
       enabled_modules = excluded.enabled_modules,
       completed_onboarding = excluded.completed_onboarding,
@@ -2138,7 +2142,7 @@ app.post("/api/billing/lifetime", async (request, reply) => {
       ${"CHECKOUT_STARTED"},
       ${"billing"},
       ${billingId},
-      ${sql.json({ external_id: externalId, price_cents: 99700 })}
+      ${sql.json(asJsonValue({ external_id: externalId, price_cents: 99700 }))} 
     )
   `;
 
@@ -2182,7 +2186,7 @@ app.post("/api/audit", async (request, reply) => {
       ${body.action},
       ${body.entityType},
       ${body.entityId ?? null},
-      ${sql.json(body.metadata ?? {})}
+      ${sql.json(asJsonValue(body.metadata ?? {}))}
     )
   `;
 
