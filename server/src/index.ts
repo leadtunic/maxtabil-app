@@ -81,6 +81,22 @@ const allowedOrigins = (() => {
   return origins.size ? Array.from(origins) : true;
 })();
 
+const isOriginAllowed = (origin?: string) => {
+  if (!origin) return false;
+  if (allowedOrigins === true) return true;
+  return allowedOrigins.includes(origin);
+};
+
+const applyCorsHeaders = (reply: FastifyReply, origin?: string) => {
+  if (!origin || !isOriginAllowed(origin)) return false;
+  reply.header("Access-Control-Allow-Origin", origin);
+  reply.header("Vary", "Origin");
+  reply.header("Access-Control-Allow-Credentials", "true");
+  reply.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  reply.header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+  return true;
+};
+
 await app.register(cors, {
   origin: allowedOrigins,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
@@ -123,7 +139,18 @@ const generateFileId = () => {
 
 const authHandler = toNodeHandler(auth);
 
+app.options("/api/auth/*", async (request, reply) => {
+  const origin = request.headers.origin;
+  if (!applyCorsHeaders(reply, origin)) {
+    reply.status(403).send({ error: "CORS_BLOCKED" });
+    return;
+  }
+  reply.status(204).send();
+});
+
 app.all("/api/auth/*", async (request, reply) => {
+  const origin = request.headers.origin;
+  applyCorsHeaders(reply, origin);
   await authHandler(request.raw, reply.raw);
   reply.hijack();
 });
