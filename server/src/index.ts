@@ -33,8 +33,36 @@ type AuthSessionResponse = {
 
 const app = Fastify({ logger: true });
 
+const allowedOrigins = (() => {
+  const origins = new Set<string>();
+
+  if (env.appBaseUrl) {
+    origins.add(env.appBaseUrl);
+    try {
+      const url = new URL(env.appBaseUrl);
+      const hostname = url.hostname;
+      if (hostname.startsWith("www.")) {
+        origins.add(`${url.protocol}//${hostname.slice(4)}`);
+      } else {
+        origins.add(`${url.protocol}//www.${hostname}`);
+      }
+    } catch {
+      // Ignore malformed URLs; rely on raw env value.
+    }
+  }
+
+  if (env.nodeEnv !== "production") {
+    origins.add("http://localhost:5173");
+    origins.add("http://127.0.0.1:5173");
+  }
+
+  return origins.size ? Array.from(origins) : true;
+})();
+
 await app.register(cors, {
-  origin: env.appBaseUrl ? [env.appBaseUrl] : true,
+  origin: allowedOrigins,
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true,
 });
 
@@ -2212,7 +2240,10 @@ app.get("/healthz", async () => ({ ok: true }));
 
 const start = async () => {
   try {
-    await app.listen({ port: env.port, host: "0.0.0.0" });
+    const host = "0.0.0.0";
+    const port = env.port;
+    await app.listen({ port, host });
+    app.log.info(`API on http://${host}:${port}`);
   } catch (error) {
     app.log.error(error);
     process.exit(1);

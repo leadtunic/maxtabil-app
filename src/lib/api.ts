@@ -11,9 +11,14 @@ export function buildApiUrl(path: string): string {
   return buildUrl(path);
 }
 
+type ApiRequestOptions = Omit<RequestInit, "body" | "headers"> & {
+  body?: unknown;
+  headers?: Record<string, string>;
+};
+
 export async function apiRequest<T>(
   path: string,
-  options: RequestInit & { body?: unknown } = {},
+  options: ApiRequestOptions = {},
 ): Promise<T> {
   const { body, headers, ...rest } = options;
   const response = await fetch(buildUrl(path), {
