@@ -7,7 +7,7 @@ import {
   useCallback,
   type ReactNode,
 } from "react";
-import { apiRequest } from "@/lib/api";
+import { apiRequest, buildApiUrl } from "@/lib/api";
 import { logAudit } from "@/lib/audit";
 import { track, identify, AnalyticsEvents, resetAnalytics } from "@/lib/analytics";
 import type {
@@ -244,23 +244,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [isEmailAllowed, loadSession]
   );
 
-  const loginWithGoogle = useCallback(async () => {
+  const loginWithGoogle = useCallback(() => {
     const callbackURL = `${window.location.origin}/app`;
-
-    const response = await apiRequest<{ url?: string }>("/api/auth/sign-in/social", {
-      method: "POST",
-      body: {
-        provider: "google",
-        callbackURL,
-        disableRedirect: true,
-      },
-    });
-
-    if (!response?.url) {
-      throw new Error("Não foi possível iniciar o login com Google.");
-    }
-
-    window.location.href = response.url;
+    const url = new URL(buildApiUrl("/api/auth/sign-in/social"));
+    url.searchParams.set("provider", "google");
+    url.searchParams.set("callbackURL", callbackURL);
+    window.location.href = url.toString();
   }, []);
 
   const logout = useCallback(async () => {
