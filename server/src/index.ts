@@ -558,7 +558,7 @@ app.post("/api/rulesets", async (request, reply) => {
       ${name},
       ${body.version},
       ${body.isActive ?? false},
-      ${body.payload},
+      ${sql.json(body.payload)},
       ${workspace.id},
       ${sessionData.user.id}
     )
@@ -599,7 +599,7 @@ app.put("/api/rulesets/:id", async (request, reply) => {
   const updated = (await sql`
     update rulesets
     set name = ${name ? name : sql`name`},
-        payload = ${body.payload},
+        payload = ${sql.json(body.payload)},
         updated_at = ${new Date()}
     where id = ${id}
       and (workspace_id = ${workspace.id} or workspace_id is null)
@@ -1710,10 +1710,7 @@ app.post("/api/admin/users", async (request, reply) => {
       ${"USER_CREATED"},
       ${"profiles"},
       ${createdUser.id},
-      ${{
-        email,
-        role,
-      }}
+      ${sql.json({ email, role })}
     )
   `;
 
@@ -1771,7 +1768,7 @@ app.post("/api/admin/users/:id/reset-password", async (request, reply) => {
       ${"USER_PASSWORD_RESET"},
       ${"profiles"},
       ${id},
-      ${{}}
+      ${sql.json({})}
     )
   `;
 
@@ -1821,7 +1818,7 @@ app.post("/api/admin/users/:id/disable", async (request, reply) => {
       ${"USER_DISABLED"},
       ${"profiles"},
       ${id},
-      ${{}}
+      ${sql.json({})}
     )
   `;
 
@@ -1868,7 +1865,7 @@ app.post("/api/admin/users/:id/enable", async (request, reply) => {
       ${"USER_ENABLED"},
       ${"profiles"},
       ${id},
-      ${{}}
+      ${sql.json({})}
     )
   `;
 
@@ -1915,7 +1912,7 @@ app.delete("/api/admin/users/:id", async (request, reply) => {
       ${"USER_DELETED"},
       ${"profiles"},
       ${id},
-      ${{}}
+      ${sql.json({})}
     )
   `;
 
@@ -2022,7 +2019,7 @@ app.put("/api/workspace/settings", async (request, reply) => {
   const updatedAt = new Date();
   const settings = (await sql`
     insert into workspace_settings (workspace_id, enabled_modules, completed_onboarding, updated_at)
-    values (${workspace.id}, ${body.enabledModules}, ${body.completedOnboarding ?? false}, ${updatedAt})
+    values (${workspace.id}, ${sql.json(body.enabledModules)}, ${body.completedOnboarding ?? false}, ${updatedAt})
     on conflict (workspace_id) do update set
       enabled_modules = excluded.enabled_modules,
       completed_onboarding = excluded.completed_onboarding,
@@ -2141,10 +2138,7 @@ app.post("/api/billing/lifetime", async (request, reply) => {
       ${"CHECKOUT_STARTED"},
       ${"billing"},
       ${billingId},
-      ${{
-        external_id: externalId,
-        price_cents: 99700,
-      }}
+      ${sql.json({ external_id: externalId, price_cents: 99700 })}
     )
   `;
 
@@ -2188,7 +2182,7 @@ app.post("/api/audit", async (request, reply) => {
       ${body.action},
       ${body.entityType},
       ${body.entityId ?? null},
-      ${body.metadata ?? {}}
+      ${sql.json(body.metadata ?? {})}
     )
   `;
 
