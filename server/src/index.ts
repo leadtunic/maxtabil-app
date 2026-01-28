@@ -89,13 +89,30 @@ const isOriginAllowed = (origin?: string) => {
 
 const applyCorsHeaders = (reply: FastifyReply, origin?: string) => {
   if (!origin || !isOriginAllowed(origin)) return false;
-  reply.header("Access-Control-Allow-Origin", origin);
-  reply.header("Vary", "Origin");
-  reply.header("Access-Control-Allow-Credentials", "true");
-  reply.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  reply.header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+  reply.raw.setHeader("Access-Control-Allow-Origin", origin);
+  reply.raw.setHeader("Vary", "Origin");
+  reply.raw.setHeader("Access-Control-Allow-Credentials", "true");
+  reply.raw.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  reply.raw.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
   return true;
 };
+
+app.addHook("onRequest", (request, reply, done) => {
+  const origin = request.headers.origin;
+  if (typeof origin === "string") {
+    applyCorsHeaders(reply, origin);
+  }
+  done();
+});
+
+app.options("/*", async (request, reply) => {
+  const origin = request.headers.origin;
+  if (!applyCorsHeaders(reply, typeof origin === "string" ? origin : undefined)) {
+    reply.status(403).send({ error: "CORS_BLOCKED" });
+    return;
+  }
+  reply.status(204).send();
+});
 
 await app.register(cors, {
   origin: allowedOrigins,
