@@ -244,7 +244,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [isEmailAllowed, loadSession]
   );
 
-  const loginWithGoogle = useCallback(() => {
+  const loginWithGoogle = useCallback(async () => {
     const callbackURL = `${window.location.origin}/app`;
     const url = new URL(buildApiUrl("/api/auth/sign-in/google"));
     url.searchParams.set("callbackURL", callbackURL);
