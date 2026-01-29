@@ -246,7 +246,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loginWithGoogle = useCallback(async () => {
     const callbackURL = `${window.location.origin}/app`;
-    const url = new URL(buildApiUrl("/api/auth/sign-in/google"));
+    const url = new URL(buildApiUrl("/api/auth/sign-in/social"));
+    url.searchParams.set("provider", "google");
     url.searchParams.set("callbackURL", callbackURL);
     window.location.href = url.toString();
   }, []);

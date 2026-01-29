@@ -149,6 +149,8 @@ app.all("/api/auth/*", async (request, reply) => {
   applyCorsHeaders(reply, origin);
 
   const url = new URL(request.raw.url || "/api/auth", `https://${request.headers.host}`);
+  const shouldProxySocialGet =
+    request.method === "GET" && url.pathname.endsWith("/sign-in/social") && url.searchParams.has("provider");
   const headers = new Headers();
   for (const [key, value] of Object.entries(request.headers)) {
     if (typeof value === "string") {
@@ -159,7 +161,16 @@ app.all("/api/auth/*", async (request, reply) => {
   }
 
   let body: string | undefined;
-  if (!["GET", "HEAD"].includes(request.method)) {
+  if (shouldProxySocialGet) {
+    const payload = {
+      provider: url.searchParams.get("provider") || "",
+      callbackURL: url.searchParams.get("callbackURL") || undefined,
+    };
+    body = JSON.stringify(payload);
+    if (!headers.has("content-type")) {
+      headers.set("content-type", "application/json");
+    }
+  } else if (!["GET", "HEAD"].includes(request.method)) {
     if (typeof request.body === "string") {
       body = request.body;
     } else if (request.body && typeof request.body === "object") {
@@ -172,7 +183,7 @@ app.all("/api/auth/*", async (request, reply) => {
 
   const authResponse = await auth.handler(
     new Request(url.toString(), {
-      method: request.method,
+      method: shouldProxySocialGet ? "POST" : request.method,
       headers,
       body,
     })
