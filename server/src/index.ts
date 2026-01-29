@@ -2019,8 +2019,9 @@ app.put("/api/workspace", async (request, reply) => {
   const sessionData = await requireSession(request, reply);
   if (!sessionData) return;
 
-  const body = request.body as { name?: string; logoPath?: string | null };
-  const name = body?.name?.trim();
+  const body = (request.body || {}) as { name?: unknown; logoPath?: unknown };
+  const name = typeof body.name === "string" ? body.name.trim() : "";
+  const logoPath = typeof body.logoPath === "string" ? body.logoPath : null;
 
   if (!name) {
     reply.status(400).send({ message: "Nome do workspace é obrigatório." });
@@ -2033,29 +2034,34 @@ app.put("/api/workspace", async (request, reply) => {
     return;
   }
 
-  const updatedAt = new Date();
-  let updated;
+  try {
+    const updatedAt = new Date();
+    let updated;
 
-  if (body.logoPath) {
-    updated = (await sql`
-      update workspaces
-      set name = ${name},
-          logo_path = ${body.logoPath},
-          updated_at = ${updatedAt}
-      where id = ${workspace.id}
-      returning *
-    `)[0];
-  } else {
-    updated = (await sql`
-      update workspaces
-      set name = ${name},
-          updated_at = ${updatedAt}
-      where id = ${workspace.id}
-      returning *
-    `)[0];
+    if (logoPath) {
+      updated = (await sql`
+        update workspaces
+        set name = ${name},
+            logo_path = ${logoPath},
+            updated_at = ${updatedAt}
+        where id = ${workspace.id}
+        returning *
+      `)[0];
+    } else {
+      updated = (await sql`
+        update workspaces
+        set name = ${name},
+            updated_at = ${updatedAt}
+        where id = ${workspace.id}
+        returning *
+      `)[0];
+    }
+
+    return updated ?? workspace;
+  } catch (error) {
+    request.log.error({ error }, "Failed to update workspace");
+    reply.status(500).send({ message: "WORKSPACE_UPDATE_FAILED" });
   }
-
-  return updated ?? workspace;
 });
 
 app.put("/api/workspace/settings", async (request, reply) => {
