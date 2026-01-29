@@ -2,7 +2,6 @@ import Fastify, { type FastifyReply, type FastifyRequest } from "fastify";
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
 import fastifyStatic from "@fastify/static";
-import { toNodeHandler } from "better-auth/node";
 import path from "node:path";
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
@@ -145,13 +144,46 @@ const generateFileId = () => {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 };
 
-const authHandler = toNodeHandler(auth);
-
 app.all("/api/auth/*", async (request, reply) => {
   const origin = request.headers.origin;
   applyCorsHeaders(reply, origin);
-  await authHandler(request.raw, reply.raw);
-  reply.hijack();
+
+  const url = new URL(request.raw.url || "/api/auth", `https://${request.headers.host}`);
+  const headers = new Headers();
+  for (const [key, value] of Object.entries(request.headers)) {
+    if (typeof value === "string") {
+      headers.set(key, value);
+    } else if (Array.isArray(value)) {
+      headers.set(key, value.join(","));
+    }
+  }
+
+  let body: string | undefined;
+  if (!["GET", "HEAD"].includes(request.method)) {
+    if (typeof request.body === "string") {
+      body = request.body;
+    } else if (request.body && typeof request.body === "object") {
+      body = JSON.stringify(request.body);
+      if (!headers.has("content-type")) {
+        headers.set("content-type", "application/json");
+      }
+    }
+  }
+
+  const authResponse = await auth.handler(
+    new Request(url.toString(), {
+      method: request.method,
+      headers,
+      body,
+    })
+  );
+
+  reply.status(authResponse.status);
+  authResponse.headers.forEach((value, key) => {
+    reply.header(key, value);
+  });
+  const buffer = Buffer.from(await authResponse.arrayBuffer());
+  reply.send(buffer);
 });
 
 const getSessionFromRequest = async (request: FastifyRequest, reply: FastifyReply): Promise<AuthSessionResponse> => {
