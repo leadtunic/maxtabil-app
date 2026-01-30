@@ -3,6 +3,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest } from "@/lib/api";
 import { track, AnalyticsEvents } from "@/lib/analytics";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { Loader2, CreditCard, Check, Shield, Zap, Clock } from "lucide-react";
 import { AnimatedCard } from "@/components/ui/animated-card";
@@ -23,10 +24,17 @@ const FEATURES = [
 export default function Paywall() {
   const { workspace, hasLifetimeAccess } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
+  const [cellphone, setCellphone] = useState("");
 
   const handleCheckout = async () => {
     if (!workspace) {
       toast.error("Workspace não encontrado");
+      return;
+    }
+
+    const normalizedPhone = cellphone.replace(/\D/g, "");
+    if (!normalizedPhone) {
+      toast.error("Informe um telefone para continuar");
       return;
     }
 
@@ -36,7 +44,10 @@ export default function Paywall() {
     try {
       const responsePayload = await apiRequest<{ paymentUrl?: string }>(
         "/api/billing/lifetime",
-        { method: "POST" }
+        {
+          method: "POST",
+          body: { cellphone: normalizedPhone },
+        }
       );
       const paymentUrl = responsePayload?.paymentUrl;
 
@@ -126,6 +137,14 @@ export default function Paywall() {
                   </>
                 )}
               </Button>
+
+              <Input
+                value={cellphone}
+                onChange={(event) => setCellphone(event.target.value)}
+                placeholder="Telefone (DDD + número)"
+                inputMode="tel"
+                className="h-12"
+              />
 
               <p className="text-xs text-center text-white/40">
                 Pagamento processado por AbacatePay. Ambiente seguro.
