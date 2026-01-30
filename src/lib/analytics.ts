@@ -1,5 +1,7 @@
 import posthog from "posthog-js";
 
+const POSTHOG_ENABLED = false;
+
 const POSTHOG_KEY =
   (import.meta.env.VITE_PUBLIC_POSTHOG_KEY as string | undefined) ??
   (import.meta.env.VITE_POSTHOG_KEY as string | undefined);
@@ -19,6 +21,7 @@ function isPosthogLoaded(): boolean {
  * Call this once at app startup
  */
 export function initPosthog(): void {
+  if (!POSTHOG_ENABLED) return;
   if (initialized || !POSTHOG_KEY) {
     if (!POSTHOG_KEY) {
       console.warn("[Analytics] PostHog key not configured. Analytics disabled.");
@@ -48,6 +51,7 @@ export function identify(
   userId: string,
   properties?: { email?: string; workspace_id?: string; workspace_name?: string }
 ): void {
+  if (!POSTHOG_ENABLED) return;
   if (!initialized && !isPosthogLoaded()) return;
   posthog.identify(userId, properties);
 }
@@ -59,6 +63,7 @@ export function track(
   event: string,
   properties?: Record<string, string | number | boolean | null | undefined>
 ): void {
+  if (!POSTHOG_ENABLED) return;
   if (!initialized && !isPosthogLoaded()) {
     console.debug(`[Analytics] Would track: ${event}`, properties);
     return;
@@ -70,6 +75,7 @@ export function track(
  * Track a page view
  */
 export function trackPageview(path: string): void {
+  if (!POSTHOG_ENABLED) return;
   if (!initialized && !isPosthogLoaded()) return;
   posthog.capture("$pageview", { $current_url: path });
 }
@@ -78,6 +84,7 @@ export function trackPageview(path: string): void {
  * Reset analytics (on logout)
  */
 export function resetAnalytics(): void {
+  if (!POSTHOG_ENABLED) return;
   if (!initialized && !isPosthogLoaded()) return;
   posthog.reset();
 }
