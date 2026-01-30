@@ -36,6 +36,21 @@ type JsonValue = string | number | boolean | null | { [key: string]: JsonValue }
 
 const asJsonValue = (value: unknown): JsonValue => value as JsonValue;
 
+const ABACATEPAY_PUBLIC_KEY =
+  "t9dXRhHHo3yDEj5pVDYz0frf7q6bMKyMRmxxCPIPp3RCplBfXRxqlC6ZpiWmOqj4L63qEaeUOtrCI8P0VMUgo6iIga2ri9ogaHFs0WIIywSMg0q7RmBfybe1E5XJcfC4IW3alNqym0tXoAKkzvfEjZxV6bE0oG2zJrNNYmUCKZyV0KZ3JS8Votf9EAWWYdiDkMkpbMdPggfh1EqHlVkMiTady6jOR3hyzGEHrIz2Ret0xHKMbiqkr9HS1JhNHDX9";
+
+const verifyAbacateSignature = (rawBody: string, signatureFromHeader: string) => {
+  const bodyBuffer = Buffer.from(rawBody, "utf8");
+  const expectedSig = crypto
+    .createHmac("sha256", ABACATEPAY_PUBLIC_KEY)
+    .update(bodyBuffer)
+    .digest("base64");
+
+  const a = Buffer.from(expectedSig);
+  const b = Buffer.from(signatureFromHeader);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+};
+
 const readMultipartFieldValue = (field: unknown): string | undefined => {
   if (!field) return undefined;
   if (Array.isArray(field)) {
@@ -103,6 +118,23 @@ app.addHook("onRequest", (request, reply, done) => {
   }
   done();
 });
+
+app.addContentTypeParser(
+  "application/json",
+  { parseAs: "string" },
+  (request, body, done) => {
+    (request as FastifyRequest & { rawBody?: string }).rawBody = body;
+    if (!body) {
+      done(null, {});
+      return;
+    }
+    try {
+      done(null, JSON.parse(body));
+    } catch (error) {
+      done(error as Error);
+    }
+  }
+);
 
 await app.register(cors, {
   origin: allowedOrigins,
@@ -2230,6 +2262,87 @@ app.post("/api/billing/lifetime", async (request, reply) => {
     billingId,
     paymentUrl,
   };
+});
+
+app.post("/api/webhooks/abacatepay", async (request, reply) => {
+  const webhookSecret = (request.query as { webhookSecret?: string }).webhookSecret;
+  if (!env.abacatePayWebhookSecret || webhookSecret !== env.abacatePayWebhookSecret) {
+    reply.status(401).send({ error: "Invalid webhook secret" });
+    return;
+  }
+
+  const signature = request.headers["x-webhook-signature"];
+  if (typeof signature !== "string") {
+    reply.status(401).send({ error: "Missing webhook signature" });
+    return;
+  }
+
+  const rawBody = (request as FastifyRequest & { rawBody?: string }).rawBody ?? "";
+  if (!rawBody || !verifyAbacateSignature(rawBody, signature)) {
+    reply.status(401).send({ error: "Invalid webhook signature" });
+    return;
+  }
+
+  const payload = request.body as {
+    id?: string;
+    event?: string;
+    devMode?: boolean;
+    data?: {
+      billing?: {
+        id?: string;
+        status?: string;
+        paidAmount?: number;
+      };
+      payment?: {
+        amount?: number;
+        method?: string;
+      };
+    };
+  };
+
+  if (payload?.event === "billing.paid") {
+    const billingId = payload.data?.billing?.id ?? null;
+    const status = payload.data?.billing?.status ?? "PAID";
+    const paidAmount = payload.data?.billing?.paidAmount ?? payload.data?.payment?.amount ?? null;
+    const updatedAt = new Date().toISOString();
+
+    if (billingId) {
+      const updated = (await sql`
+        update entitlements
+        set lifetime_access = true,
+            abacate_status = ${status},
+            lifetime_paid_at = ${updatedAt},
+            updated_at = ${updatedAt}
+        where abacate_billing_id = ${billingId}
+        returning workspace_id
+      `)[0];
+
+      if (updated?.workspace_id) {
+        await sql`
+          insert into audit_logs (
+            workspace_id,
+            actor_user_id,
+            actor_email,
+            action,
+            entity_type,
+            entity_id,
+            metadata
+          )
+          values (
+            ${updated.workspace_id},
+            ${null},
+            ${null},
+            ${"CHECKOUT_PAID"},
+            ${"billing"},
+            ${billingId},
+            ${sql.json(asJsonValue({ event_id: payload.id ?? null, amount_cents: paidAmount }))}
+          )
+        `;
+      }
+    }
+  }
+
+  return { received: true };
 });
 
 app.post("/api/audit", async (request, reply) => {
