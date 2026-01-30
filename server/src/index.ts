@@ -2046,7 +2046,7 @@ app.put("/api/workspace", async (request, reply) => {
   }
 
   try {
-    const updatedAt = new Date();
+    const updatedAt = new Date().toISOString();
     let updated;
 
     if (logoPath) {
