@@ -123,13 +123,14 @@ app.addContentTypeParser(
   "application/json",
   { parseAs: "string" },
   (request, body, done) => {
-    (request as FastifyRequest & { rawBody?: string }).rawBody = body;
-    if (!body) {
+    const rawBody = Buffer.isBuffer(body) ? body.toString("utf8") : body;
+    (request as FastifyRequest & { rawBody?: string }).rawBody = rawBody;
+    if (!rawBody) {
       done(null, {});
       return;
     }
     try {
-      done(null, JSON.parse(body));
+      done(null, JSON.parse(rawBody));
     } catch (error) {
       done(error as Error);
     }
