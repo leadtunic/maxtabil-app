@@ -2095,10 +2095,15 @@ app.put("/api/workspace/settings", async (request, reply) => {
     return;
   }
 
-  const updatedAt = new Date();
+  const normalizedModules = Object.fromEntries(
+    Object.entries(body.enabledModules).map(([key, value]) => [key, Boolean(value)])
+  );
+  const enabledModulesJson = JSON.stringify(normalizedModules);
+  const updatedAt = new Date().toISOString();
+  const completedOnboarding = Boolean(body.completedOnboarding);
   const settings = (await sql`
     insert into workspace_settings (workspace_id, enabled_modules, completed_onboarding, updated_at)
-    values (${workspace.id}, ${sql.json(asJsonValue(body.enabledModules))}, ${body.completedOnboarding ?? false}, ${updatedAt})
+    values (${workspace.id}, ${enabledModulesJson}, ${completedOnboarding}, ${updatedAt})
     on conflict (workspace_id) do update set
       enabled_modules = excluded.enabled_modules,
       completed_onboarding = excluded.completed_onboarding,
