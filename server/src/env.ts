@@ -8,6 +8,7 @@ export const env = {
   abacatePayApiKey: process.env.ABACATEPAY_API_KEY ?? "",
   abacatePayWebhookSecret: process.env.ABACATEPAY_WEBHOOK_SECRET ?? "",
   abacatePayCustomerPhone: process.env.ABACATEPAY_CUSTOMER_PHONE ?? "",
+  abacatePayCustomerTaxId: process.env.ABACATEPAY_CUSTOMER_TAX_ID ?? "",
   uploadsDir: process.env.UPLOADS_DIR ?? "",
   googleClientId: process.env.GOOGLE_OAUTH_CLIENT_ID ?? "",
   googleClientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET ?? "",

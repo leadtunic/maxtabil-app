@@ -25,6 +25,7 @@ export default function Paywall() {
   const { workspace, hasLifetimeAccess } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [cellphone, setCellphone] = useState("");
+  const [taxId, setTaxId] = useState("");
 
   const handleCheckout = async () => {
     if (!workspace) {
@@ -37,6 +38,11 @@ export default function Paywall() {
       toast.error("Informe um telefone para continuar");
       return;
     }
+    const normalizedTaxId = taxId.replace(/\D/g, "");
+    if (!normalizedTaxId) {
+      toast.error("Informe um CPF/CNPJ para continuar");
+      return;
+    }
 
     setIsLoading(true);
     track(AnalyticsEvents.CHECKOUT_STARTED, { price: LIFETIME_PRICE });
@@ -46,7 +52,7 @@ export default function Paywall() {
         "/api/billing/lifetime",
         {
           method: "POST",
-          body: { cellphone: normalizedPhone },
+          body: { cellphone: normalizedPhone, taxId: normalizedTaxId },
         }
       );
       const paymentUrl = responsePayload?.paymentUrl;
@@ -143,6 +149,14 @@ export default function Paywall() {
                 onChange={(event) => setCellphone(event.target.value)}
                 placeholder="Telefone (DDD + número)"
                 inputMode="tel"
+                className="h-12"
+              />
+
+              <Input
+                value={taxId}
+                onChange={(event) => setTaxId(event.target.value)}
+                placeholder="CPF ou CNPJ"
+                inputMode="numeric"
                 className="h-12"
               />
 

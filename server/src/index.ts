@@ -2151,7 +2151,7 @@ app.post("/api/billing/lifetime", async (request, reply) => {
   const sessionData = await requireSession(request, reply);
   if (!sessionData) return;
 
-  const body = request.body as { cellphone?: string } | undefined;
+  const body = request.body as { cellphone?: string; taxId?: string } | undefined;
 
   if (!env.abacatePayApiKey) {
     reply.status(500).send({ message: "ABACATEPAY_API_KEY não configurado." });
@@ -2166,6 +2166,12 @@ app.post("/api/billing/lifetime", async (request, reply) => {
   const customerCellphone = body?.cellphone?.trim() || env.abacatePayCustomerPhone;
   if (!customerCellphone) {
     reply.status(500).send({ message: "ABACATEPAY_CUSTOMER_PHONE não configurado." });
+    return;
+  }
+
+  const customerTaxId = body?.taxId?.trim() || env.abacatePayCustomerTaxId;
+  if (!customerTaxId) {
+    reply.status(500).send({ message: "ABACATEPAY_CUSTOMER_TAX_ID não configurado." });
     return;
   }
 
@@ -2200,6 +2206,7 @@ app.post("/api/billing/lifetime", async (request, reply) => {
       name: sessionData.user.name || sessionData.user.email?.split("@")[0] || "Cliente",
       email: sessionData.user.email,
       cellphone: customerCellphone,
+      taxId: customerTaxId,
     },
     externalId,
     metadata: {
