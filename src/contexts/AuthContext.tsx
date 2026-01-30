@@ -249,6 +249,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const url = new URL(buildApiUrl("/api/auth/sign-in/social"));
     url.searchParams.set("provider", "google");
     url.searchParams.set("callbackURL", callbackURL);
+
+    try {
+      const response = await fetch(url.toString(), { credentials: "include" });
+      const data = (await response.json()) as { url?: string; redirect?: boolean };
+      if (data?.url) {
+        window.location.href = data.url;
+        return;
+      }
+    } catch (error) {
+      console.error("[Auth] Failed to start Google login:", error);
+    }
+
     window.location.href = url.toString();
   }, []);
 
