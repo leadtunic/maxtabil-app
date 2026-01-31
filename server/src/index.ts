@@ -2242,8 +2242,17 @@ app.post("/api/billing/lifetime", async (request, reply) => {
         };
       }
     | null;
-  const billingId = billingResult?.data?.id || billingResult?.id || null;
-  const paymentUrl = billingResult?.data?.url || billingResult?.url || billingResult?.data?.paymentUrl;
+  const billingIdRaw = billingResult?.data?.id || billingResult?.id || null;
+  const paymentUrlRaw =
+    billingResult?.data?.url || billingResult?.url || billingResult?.data?.paymentUrl;
+  const billingId =
+    typeof billingIdRaw === "string" || typeof billingIdRaw === "number"
+      ? String(billingIdRaw)
+      : null;
+  const paymentUrl =
+    typeof paymentUrlRaw === "string" || typeof paymentUrlRaw === "number"
+      ? String(paymentUrlRaw)
+      : undefined;
 
   const entitlementUpdatedAt = new Date().toISOString();
   await sql`
