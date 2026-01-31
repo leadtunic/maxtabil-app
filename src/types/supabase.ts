@@ -58,6 +58,7 @@ export interface Database {
           workspace_id: string;
           enabled_modules: EnabledModules;
           completed_onboarding: boolean;
+          branding: Json;
           created_at: string;
           updated_at: string;
         };
@@ -65,6 +66,7 @@ export interface Database {
           workspace_id: string;
           enabled_modules?: EnabledModules;
           completed_onboarding?: boolean;
+          branding?: Json;
           created_at?: string;
           updated_at?: string;
         };
@@ -72,6 +74,7 @@ export interface Database {
           workspace_id?: string;
           enabled_modules?: EnabledModules;
           completed_onboarding?: boolean;
+          branding?: Json;
           created_at?: string;
           updated_at?: string;
         };

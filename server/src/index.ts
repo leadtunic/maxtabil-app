@@ -10,6 +10,7 @@ import { pipeline } from "node:stream/promises";
 import { auth } from "./auth.js";
 import { env } from "./env.js";
 import { sql } from "./db/index.js";
+import { defaultRuleSets } from "./rulesets.js";
 
 type AuthUser = {
   id: string;
@@ -286,6 +287,35 @@ const getWorkspaceForUser = async (userId: string) => {
   `)[0];
 };
 
+const seedDefaultRuleSets = async (workspaceId: string, userId: string) => {
+  const existingRows = await sql`
+    select simulator_key
+    from rulesets
+    where workspace_id = ${workspaceId}
+  `;
+
+  const existingKeys = new Set<string>(existingRows.map((row) => row.simulator_key));
+  const missing = defaultRuleSets.filter((seed) => !existingKeys.has(seed.key));
+
+  if (!missing.length) return;
+
+  for (const seed of missing) {
+    await sql`
+      insert into rulesets (simulator_key, name, version, is_active, payload, workspace_id, created_by)
+      values (
+        ${seed.key},
+        ${seed.name},
+        ${seed.version},
+        true,
+        ${sql.json(asJsonValue(seed.payload))},
+        ${workspaceId},
+        ${userId}
+      )
+      on conflict do nothing
+    `;
+  }
+};
+
 const ensureWorkspace = async (user: AuthUser) => {
   const email = user.email || "user@example.com";
   const displayName = user.name || email.split("@")[0] || "Usuário";
@@ -310,6 +340,8 @@ const ensureWorkspace = async (user: AuthUser) => {
         values (${workspace.id})
         on conflict (workspace_id) do nothing
       `;
+
+      await seedDefaultRuleSets(workspace.id, user.id);
     }
   }
 
@@ -597,6 +629,7 @@ app.get("/api/rulesets/active", async (request, reply) => {
     where simulator_key = ${simulatorKey}
       and is_active = true
       and (workspace_id = ${workspace.id} or workspace_id is null)
+    order by (workspace_id is null) asc, created_at desc
     limit 1
   `)[0];
 
@@ -615,7 +648,7 @@ app.get("/api/rulesets", async (request, reply) => {
     return;
   }
 
-  const rows = simulatorKey
+  let rows = simulatorKey
     ? await sql`
         select *
         from rulesets
@@ -629,6 +662,24 @@ app.get("/api/rulesets", async (request, reply) => {
         where (workspace_id = ${workspace.id} or workspace_id is null)
         order by simulator_key asc, version desc
       `;
+
+  if (!rows?.length) {
+    await seedDefaultRuleSets(workspace.id, sessionData.user.id);
+    rows = simulatorKey
+      ? await sql`
+          select *
+          from rulesets
+          where simulator_key = ${simulatorKey}
+            and (workspace_id = ${workspace.id} or workspace_id is null)
+          order by version desc
+        `
+      : await sql`
+          select *
+          from rulesets
+          where (workspace_id = ${workspace.id} or workspace_id is null)
+          order by simulator_key asc, version desc
+        `;
+  }
 
   return rows;
 });
@@ -2115,12 +2166,8 @@ app.put("/api/workspace/settings", async (request, reply) => {
   const body = request.body as {
     enabledModules?: Record<string, boolean>;
     completedOnboarding?: boolean;
+    branding?: Record<string, unknown>;
   };
-
-  if (!body?.enabledModules) {
-    reply.status(400).send({ message: "Configurações inválidas." });
-    return;
-  }
 
   const workspace = await ensureWorkspace(sessionData.user);
   if (!workspace) {
@@ -2128,18 +2175,56 @@ app.put("/api/workspace/settings", async (request, reply) => {
     return;
   }
 
-  const normalizedModules = Object.fromEntries(
-    Object.entries(body.enabledModules).map(([key, value]) => [key, Boolean(value)])
-  );
-  const enabledModulesJson = JSON.stringify(normalizedModules);
+  const currentSettings = await ensureWorkspaceSettings(workspace.id);
+  if (!currentSettings) {
+    reply.status(500).send({ message: "WORKSPACE_SETTINGS_FAILED" });
+    return;
+  }
+
+  const hasEnabledModules = body?.enabledModules !== undefined;
+  const hasBranding = body?.branding !== undefined;
+  const hasCompletedOnboarding = body?.completedOnboarding !== undefined;
+
+  if (!hasEnabledModules && !hasBranding && !hasCompletedOnboarding) {
+    reply.status(400).send({ message: "Configurações inválidas." });
+    return;
+  }
+
+  const baseModules = (currentSettings.enabled_modules ?? {}) as Record<string, boolean>;
+  const nextModules = hasEnabledModules
+    ? Object.fromEntries(
+        Object.entries(body.enabledModules ?? {}).map(([key, value]) => [key, Boolean(value)])
+      )
+    : baseModules;
+  const enabledModulesJson = JSON.stringify(nextModules);
   const updatedAt = new Date().toISOString();
-  const completedOnboarding = Boolean(body.completedOnboarding);
+  const completedOnboarding = hasCompletedOnboarding
+    ? Boolean(body.completedOnboarding)
+    : Boolean(currentSettings.completed_onboarding);
+  const branding =
+    hasBranding && body.branding && typeof body.branding === "object"
+      ? body.branding
+      : (currentSettings as { branding?: Record<string, unknown> }).branding ?? {};
+
   const settings = (await sql`
-    insert into workspace_settings (workspace_id, enabled_modules, completed_onboarding, updated_at)
-    values (${workspace.id}, ${enabledModulesJson}, ${completedOnboarding}, ${updatedAt})
+    insert into workspace_settings (
+      workspace_id,
+      enabled_modules,
+      completed_onboarding,
+      branding,
+      updated_at
+    )
+    values (
+      ${workspace.id},
+      ${enabledModulesJson},
+      ${completedOnboarding},
+      ${sql.json(asJsonValue(branding))},
+      ${updatedAt}
+    )
     on conflict (workspace_id) do update set
       enabled_modules = excluded.enabled_modules,
       completed_onboarding = excluded.completed_onboarding,
+      branding = excluded.branding,
       updated_at = excluded.updated_at
     returning *
   `)[0];

@@ -15,6 +15,13 @@
       "when": 1769620000000,
       "tag": "0001_app_schema",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1769868000000,
+      "tag": "0002_workspace_settings_branding",
+      "breakpoints": true
     }
   ]
 }

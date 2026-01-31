@@ -31,6 +31,42 @@ const AVAILABLE_MODULES: { key: ModuleKey; label: string }[] = [
   { key: "admin", label: "Administração" },
 ];
 
+type BrandingSettings = {
+  sidebarStart: string;
+  sidebarEnd: string;
+  sidebarAccent: string;
+  textOnSidebar: string;
+};
+
+const DEFAULT_BRANDING: BrandingSettings = {
+  sidebarStart: "#0F172A",
+  sidebarEnd: "#0B1220",
+  sidebarAccent: "#1D4ED8",
+  textOnSidebar: "#E2E8F0",
+};
+
+const normalizeBranding = (value?: unknown): BrandingSettings => {
+  if (!value || typeof value !== "object") return DEFAULT_BRANDING;
+  const data = value as Record<string, unknown>;
+  return {
+    sidebarStart:
+      typeof data.sidebarStart === "string" ? data.sidebarStart : DEFAULT_BRANDING.sidebarStart,
+    sidebarEnd:
+      typeof data.sidebarEnd === "string" ? data.sidebarEnd : DEFAULT_BRANDING.sidebarEnd,
+    sidebarAccent:
+      typeof data.sidebarAccent === "string" ? data.sidebarAccent : DEFAULT_BRANDING.sidebarAccent,
+    textOnSidebar:
+      typeof data.textOnSidebar === "string" ? data.textOnSidebar : DEFAULT_BRANDING.textOnSidebar,
+  };
+};
+
+const loadStoredBranding = (): BrandingSettings => ({
+  sidebarStart: localStorage.getItem("mt.sidebarStart") ?? DEFAULT_BRANDING.sidebarStart,
+  sidebarEnd: localStorage.getItem("mt.sidebarEnd") ?? DEFAULT_BRANDING.sidebarEnd,
+  sidebarAccent: localStorage.getItem("mt.sidebarAccent") ?? DEFAULT_BRANDING.sidebarAccent,
+  textOnSidebar: localStorage.getItem("mt.sidebarText") ?? DEFAULT_BRANDING.textOnSidebar,
+});
+
 export default function Configuracoes() {
   const { workspace, settings, refreshWorkspace, hasModule } = useAuth();
   const [searchParams] = useSearchParams();
@@ -55,12 +91,9 @@ export default function Configuracoes() {
     normalizeEnabledModules(settings?.enabled_modules as Record<ModuleKey, boolean> | undefined)
   );
   const [isSaving, setIsSaving] = useState(false);
-  const [branding, setBranding] = useState(() => ({
-    sidebarStart: localStorage.getItem("mt.sidebarStart") ?? "#0F172A",
-    sidebarEnd: localStorage.getItem("mt.sidebarEnd") ?? "#0B1220",
-    sidebarAccent: localStorage.getItem("mt.sidebarAccent") ?? "#1D4ED8",
-    textOnSidebar: localStorage.getItem("mt.sidebarText") ?? "#E2E8F0",
-  }));
+  const [branding, setBranding] = useState<BrandingSettings>(() => loadStoredBranding());
+  const [brandingLoaded, setBrandingLoaded] = useState(false);
+  const [isSavingBranding, setIsSavingBranding] = useState(false);
 
   useEffect(() => {
     if (workspace?.name) {
@@ -81,6 +114,14 @@ export default function Configuracoes() {
       );
     }
   }, [settings?.enabled_modules]);
+
+  useEffect(() => {
+    if (brandingLoaded) return;
+    if (!settings?.branding) return;
+    const normalized = normalizeBranding(settings.branding);
+    setBranding(normalized);
+    setBrandingLoaded(true);
+  }, [brandingLoaded, settings?.branding]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -154,6 +195,7 @@ export default function Configuracoes() {
         body: {
           enabledModules: normalizeEnabledModules(enabledModules),
           completedOnboarding: settings?.completed_onboarding ?? false,
+          branding,
         },
       });
 
@@ -165,6 +207,33 @@ export default function Configuracoes() {
       toast.error("Erro ao salvar configurações", { description: message });
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleSaveBranding = async () => {
+    if (!workspace) {
+      toast.error("Workspace não carregado. Recarregue a página.");
+      return;
+    }
+
+    setIsSavingBranding(true);
+    try {
+      await apiRequest<WorkspaceSettings>("/api/workspace/settings", {
+        method: "PUT",
+        body: {
+          enabledModules: normalizeEnabledModules(enabledModules),
+          completedOnboarding: settings?.completed_onboarding ?? false,
+          branding,
+        },
+      });
+
+      await refreshWorkspace();
+      toast.success("Personalização salva!");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Erro desconhecido";
+      toast.error("Erro ao salvar personalização", { description: message });
+    } finally {
+      setIsSavingBranding(false);
     }
   };
 
@@ -421,6 +490,19 @@ export default function Configuracoes() {
               </div>
             </CardContent>
           </Card>
+
+          <div className="flex justify-end">
+            <Button onClick={handleSaveBranding} disabled={isSavingBranding}>
+              {isSavingBranding ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Salvando...
+                </>
+              ) : (
+                "Salvar personalização"
+              )}
+            </Button>
+          </div>
         </TabsContent>
 
         {hasModule("admin") && (

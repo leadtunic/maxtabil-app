@@ -74,6 +74,30 @@ const GUIDE_STEPS: GuideStep[] = [
       "Personalize seu escritório: altere o nome, faça upload da sua logo e escolha quais módulos aparecem no menu.",
     icon: Settings,
   },
+  {
+    title: "Administração",
+    description:
+      "Gerencie usuários, links úteis, regras de cálculo e acompanhe a auditoria de ações do sistema.",
+    icon: Shield,
+  },
+  {
+    title: "Regras e Simuladores",
+    description:
+      "As regras já vêm configuradas. Você pode ajustar parâmetros, salvar novas versões e ativar a versão que quiser.",
+    icon: Calculator,
+  },
+  {
+    title: "Personalização",
+    description:
+      "Na aba Personalização você ajusta as cores da sidebar e deixa o painel com a identidade do seu escritório.",
+    icon: Settings,
+  },
+  {
+    title: "Ajuda Rápida",
+    description:
+      "Clique no ícone de ajuda no topo da Home para reabrir este guia quando quiser.",
+    icon: CheckCircle,
+  },
 ];
 
 interface GuideDialogProps {
