@@ -2262,10 +2262,13 @@ app.post("/api/billing/lifetime", async (request, reply) => {
       : undefined;
 
   const entitlementUpdatedAt = new Date().toISOString();
+  const workspaceIdText = workspaceId == null ? null : String(workspaceId);
+  const billingIdText = billingId == null ? null : String(billingId);
+  const statusText = "PENDING";
   try {
     await sql`
       insert into entitlements (workspace_id, lifetime_access, abacate_billing_id, abacate_status, updated_at)
-      values (${workspaceId}, false, ${billingId}, ${"PENDING"}, ${entitlementUpdatedAt})
+      values (${workspaceIdText}, false, ${billingIdText}, ${statusText}, ${entitlementUpdatedAt})
       on conflict (workspace_id) do update set
         abacate_billing_id = excluded.abacate_billing_id,
         abacate_status = excluded.abacate_status,
