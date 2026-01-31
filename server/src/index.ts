@@ -2262,35 +2262,55 @@ app.post("/api/billing/lifetime", async (request, reply) => {
       : undefined;
 
   const entitlementUpdatedAt = new Date().toISOString();
-  await sql`
-    insert into entitlements (workspace_id, lifetime_access, abacate_billing_id, abacate_status, updated_at)
-    values (${workspaceId}, false, ${billingId}, ${"PENDING"}, ${entitlementUpdatedAt})
-    on conflict (workspace_id) do update set
-      abacate_billing_id = excluded.abacate_billing_id,
-      abacate_status = excluded.abacate_status,
-      updated_at = excluded.updated_at
-  `;
+  try {
+    await sql`
+      insert into entitlements (workspace_id, lifetime_access, abacate_billing_id, abacate_status, updated_at)
+      values (${workspaceId}, false, ${billingId}, ${"PENDING"}, ${entitlementUpdatedAt})
+      on conflict (workspace_id) do update set
+        abacate_billing_id = excluded.abacate_billing_id,
+        abacate_status = excluded.abacate_status,
+        updated_at = excluded.updated_at
+    `;
 
-  await sql`
-    insert into audit_logs (
-      workspace_id,
-      actor_user_id,
-      actor_email,
-      action,
-      entity_type,
-      entity_id,
-      metadata
-    )
-    values (
-      ${workspaceId},
-      ${userId},
-      ${userEmail},
-      ${"CHECKOUT_STARTED"},
-      ${"billing"},
-      ${billingId},
-      ${sql.json(asJsonValue({ external_id: externalId, price_cents: 99700 }))} 
-    )
-  `;
+    await sql`
+      insert into audit_logs (
+        workspace_id,
+        actor_user_id,
+        actor_email,
+        action,
+        entity_type,
+        entity_id,
+        metadata
+      )
+      values (
+        ${workspaceId},
+        ${userId},
+        ${userEmail},
+        ${"CHECKOUT_STARTED"},
+        ${"billing"},
+        ${billingId},
+        ${sql.json(asJsonValue({ external_id: externalId, price_cents: 99700 }))} 
+      )
+    `;
+  } catch (error) {
+    request.log.error(
+      {
+        error,
+        checkoutParams: {
+          workspaceIdType: typeof workspaceId,
+          userIdType: typeof userId,
+          userEmailType: typeof userEmail,
+          billingIdType: typeof billingId,
+          workspaceIdIsObject: typeof workspaceId === "object",
+          userIdIsObject: typeof userId === "object",
+          userEmailIsObject: typeof userEmail === "object",
+          billingIdIsObject: typeof billingId === "object",
+        },
+      },
+      "Checkout persistence failed"
+    );
+    throw error;
+  }
 
   return {
     billingId,
