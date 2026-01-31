@@ -2187,7 +2187,10 @@ app.post("/api/billing/lifetime", async (request, reply) => {
     return;
   }
 
-  const externalId = `${bundle.workspace.id}:${sessionData.user.id}:${Date.now()}`;
+  const workspaceId = String(bundle.workspace.id);
+  const userId = String(sessionData.user.id);
+  const userEmail = sessionData.user.email ? String(sessionData.user.email) : null;
+  const externalId = `${workspaceId}:${userId}:${Date.now()}`;
   const payload = {
     frequency: "ONE_TIME",
     methods: ["PIX"],
@@ -2259,7 +2262,7 @@ app.post("/api/billing/lifetime", async (request, reply) => {
   const entitlementUpdatedAt = new Date().toISOString();
   await sql`
     insert into entitlements (workspace_id, lifetime_access, abacate_billing_id, abacate_status, updated_at)
-    values (${bundle.workspace.id}, false, ${billingId}, ${"PENDING"}, ${entitlementUpdatedAt})
+    values (${workspaceId}, false, ${billingId}, ${"PENDING"}, ${entitlementUpdatedAt})
     on conflict (workspace_id) do update set
       abacate_billing_id = excluded.abacate_billing_id,
       abacate_status = excluded.abacate_status,
@@ -2277,9 +2280,9 @@ app.post("/api/billing/lifetime", async (request, reply) => {
       metadata
     )
     values (
-      ${bundle.workspace.id},
-      ${sessionData.user.id},
-      ${sessionData.user.email},
+      ${workspaceId},
+      ${userId},
+      ${userEmail},
       ${"CHECKOUT_STARTED"},
       ${"billing"},
       ${billingId},
