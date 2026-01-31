@@ -61,7 +61,7 @@ interface AuthContextType {
     password: string,
     name?: string
   ) => Promise<{ success: boolean; error?: string; requiresEmailConfirmation?: boolean }>;
-  loginWithGoogle: () => Promise<void>;
+  loginWithGoogle: (intent?: "login" | "signup") => Promise<void>;
   logout: () => Promise<void>;
   refreshWorkspace: () => Promise<void>;
 
@@ -121,21 +121,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await fetchWorkspaceData(user.id);
   }, [user, fetchWorkspaceData]);
 
-  const isEmailAllowed = useCallback(async (email: string): Promise<boolean> => {
-    const normalizedEmail = email.trim().toLowerCase();
-    if (!normalizedEmail) return false;
-
-    try {
-      const data = await apiRequest<{ allowed: boolean }>(
-        `/api/allowlist/check?email=${encodeURIComponent(normalizedEmail)}`
-      );
-      return Boolean(data?.allowed);
-    } catch (error) {
-      console.error("[Auth] allowlist check failed:", error);
-      return false;
-    }
-  }, []);
-
   const loadSession = useCallback(async () => {
     try {
       const sessionData = await apiRequest<SessionResponse>("/api/auth/get-session");
@@ -173,11 +158,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback(
     async (email: string, password: string) => {
-      const allowed = await isEmailAllowed(email);
-      if (!allowed) {
-        return { success: false, error: "E-mail não autorizado para acesso." };
-      }
-
       try {
         await apiRequest("/api/auth/sign-in/email", {
           method: "POST",
@@ -196,22 +176,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         return { success: true };
       } catch (error) {
+        const message = error instanceof Error ? error.message : "Credenciais inválidas";
+        const lowerMessage = message.toLowerCase();
+        if (
+          message === "EMAIL_NOT_VERIFIED" ||
+          lowerMessage.includes("verify") ||
+          lowerMessage.includes("verified")
+        ) {
+          return { success: false, error: "Confirme seu e-mail para acessar." };
+        }
         return {
           success: false,
-          error: error instanceof Error ? error.message : "Credenciais inválidas",
+          error: message,
         };
       }
     },
-    [isEmailAllowed, loadSession]
+    [loadSession]
   );
 
   const signUp = useCallback(
     async (email: string, password: string, name?: string) => {
-      const allowed = await isEmailAllowed(email);
-      if (!allowed) {
-        return { success: false, error: "E-mail não autorizado para cadastro." };
-      }
-
       const displayName = name || email.split("@")[0];
 
       try {
@@ -235,23 +219,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           requiresEmailConfirmation: !response?.token,
         };
       } catch (error) {
+        const message = error instanceof Error ? error.message : "Erro ao criar conta";
+        if (message === "EMAIL_NOT_CONFIGURED") {
+          return {
+            success: false,
+            error: "Confirmação por e-mail não configurada. Contate o suporte.",
+          };
+        }
         return {
           success: false,
-          error: error instanceof Error ? error.message : "Erro ao criar conta",
+          error: message,
         };
       }
     },
-    [isEmailAllowed, loadSession]
+    [loadSession]
   );
 
-  const loginWithGoogle = useCallback(async () => {
+  const loginWithGoogle = useCallback(async (intent: "login" | "signup" = "login") => {
     const callbackURL = `${window.location.origin}/app`;
-    const url = new URL(buildApiUrl("/api/auth/sign-in/social"));
-    url.searchParams.set("provider", "google");
-    url.searchParams.set("callbackURL", callbackURL);
+    const url = buildApiUrl("/api/auth/sign-in/social");
+    const authorizationParams =
+      intent === "signup"
+        ? {
+            prompt: "consent",
+            screen_hint: "signup",
+          }
+        : {
+            prompt: "select_account",
+          };
 
     try {
-      const response = await fetch(url.toString(), { credentials: "include" });
+      const response = await fetch(url, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider: "google",
+          callbackURL,
+          authorizationParams,
+        }),
+      });
       const data = (await response.json()) as { url?: string; redirect?: boolean };
       if (data?.url) {
         window.location.href = data.url;

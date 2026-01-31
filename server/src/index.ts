@@ -2048,7 +2048,7 @@ app.post("/api/storage/workspace-logos", async (request, reply) => {
     return;
   }
 
-  const fileName = `logo.${extension}`;
+  const fileName = `logo-${generateFileId()}.${extension}`;
   const relativePath = `${bundle.workspace.id}/${fileName}`;
   const targetDir = path.join(workspaceLogoRoot, bundle.workspace.id);
   await fs.mkdir(targetDir, { recursive: true });

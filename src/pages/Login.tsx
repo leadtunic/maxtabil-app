@@ -107,7 +107,7 @@ export default function Login() {
   const handleGoogleLogin = async () => {
     setIsLoading(true);
     try {
-      await loginWithGoogle();
+      await loginWithGoogle(tab === "signup" ? "signup" : "login");
     } catch {
       setError("Erro ao conectar com Google");
       setIsLoading(false);
@@ -197,11 +197,17 @@ export default function Login() {
             </div>
 
             <Tabs value={tab} onValueChange={(v) => setTab(v as "login" | "signup")}>
-              <TabsList className="grid w-full grid-cols-2 bg-white/5">
-                <TabsTrigger value="login" className="data-[state=active]:bg-white/10">
+              <TabsList className="grid w-full grid-cols-2 bg-white/5 text-white/60">
+                <TabsTrigger
+                  value="login"
+                  className="text-white/70 data-[state=active]:bg-white/15 data-[state=active]:text-white"
+                >
                   Entrar
                 </TabsTrigger>
-                <TabsTrigger value="signup" className="data-[state=active]:bg-white/10">
+                <TabsTrigger
+                  value="signup"
+                  className="text-white/70 data-[state=active]:bg-white/15 data-[state=active]:text-white"
+                >
                   Criar Conta
                 </TabsTrigger>
               </TabsList>
