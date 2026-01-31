@@ -2181,7 +2181,8 @@ app.post("/api/billing/lifetime", async (request, reply) => {
     return;
   }
 
-  const entitlement = await ensureEntitlement(bundle.workspace.id);
+  const rawWorkspaceId = String(bundle.workspace.id);
+  const entitlement = await ensureEntitlement(rawWorkspaceId);
   if (entitlement?.lifetime_access) {
     reply.status(400).send({ message: "Acesso vitalício já está ativo." });
     return;
@@ -2189,7 +2190,7 @@ app.post("/api/billing/lifetime", async (request, reply) => {
 
   const toDbString = (value: unknown) => (value == null ? null : String(value));
 
-  const workspaceId = toDbString(bundle.workspace.id);
+  const workspaceId = toDbString(rawWorkspaceId);
   const userId = toDbString(sessionData.user.id);
   const userEmail = sessionData.user.email ? toDbString(sessionData.user.email) : null;
   const externalId = `${workspaceId ?? "unknown"}:${userId ?? "unknown"}:${Date.now()}`;
@@ -2215,8 +2216,8 @@ app.post("/api/billing/lifetime", async (request, reply) => {
     },
     externalId,
     metadata: {
-      workspace_id: bundle.workspace.id,
-      user_id: sessionData.user.id,
+      workspace_id: rawWorkspaceId,
+      user_id: String(sessionData.user.id),
     },
   };
 
