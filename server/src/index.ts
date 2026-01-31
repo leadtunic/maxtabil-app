@@ -2275,6 +2275,7 @@ app.post("/api/billing/lifetime", async (request, reply) => {
         updated_at = excluded.updated_at
     `;
 
+    const checkoutMetadata = JSON.stringify({ external_id: externalId, price_cents: 99700 });
     await sql`
       insert into audit_logs (
         workspace_id,
@@ -2292,7 +2293,7 @@ app.post("/api/billing/lifetime", async (request, reply) => {
         ${"CHECKOUT_STARTED"},
         ${"billing"},
         ${billingId},
-        ${sql.json(asJsonValue({ external_id: externalId, price_cents: 99700 }))} 
+        ${checkoutMetadata}::jsonb
       )
     `;
   } catch (error) {
