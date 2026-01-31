@@ -2187,18 +2187,12 @@ app.post("/api/billing/lifetime", async (request, reply) => {
     return;
   }
 
-  const toSafeString = (value: unknown) => {
-    if (value == null) return null;
-    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-      return String(value);
-    }
-    return JSON.stringify(value);
-  };
+  const toDbString = (value: unknown) => (value == null ? null : String(value));
 
-  const workspaceId = toSafeString(bundle.workspace.id);
-  const userId = toSafeString(sessionData.user.id);
-  const userEmail = sessionData.user.email ? toSafeString(sessionData.user.email) : null;
-  const externalId = `${workspaceId}:${userId}:${Date.now()}`;
+  const workspaceId = toDbString(bundle.workspace.id);
+  const userId = toDbString(sessionData.user.id);
+  const userEmail = sessionData.user.email ? toDbString(sessionData.user.email) : null;
+  const externalId = `${workspaceId ?? "unknown"}:${userId ?? "unknown"}:${Date.now()}`;
   const payload = {
     frequency: "ONE_TIME",
     methods: ["PIX"],
@@ -2256,7 +2250,7 @@ app.post("/api/billing/lifetime", async (request, reply) => {
   const billingIdRaw = billingResult?.data?.id || billingResult?.id || null;
   const paymentUrlRaw =
     billingResult?.data?.url || billingResult?.url || billingResult?.data?.paymentUrl;
-  const billingId = toSafeString(billingIdRaw);
+  const billingId = toDbString(billingIdRaw);
   const paymentUrl =
     typeof paymentUrlRaw === "string" || typeof paymentUrlRaw === "number"
       ? String(paymentUrlRaw)
