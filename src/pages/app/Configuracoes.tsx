@@ -10,7 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Loader2, Upload, Settings, Building2, Lock, ShieldCheck } from "lucide-react";
+import { Loader2, Upload, Settings, Building2, Lock, ShieldCheck, Paintbrush } from "lucide-react";
 import type { ModuleKey, Workspace, WorkspaceSettings } from "@/types/supabase";
 import AdminUsuarios from "@/pages/app/admin/AdminUsuarios";
 import AdminLinks from "@/pages/app/admin/AdminLinks";
@@ -55,6 +55,12 @@ export default function Configuracoes() {
     normalizeEnabledModules(settings?.enabled_modules as Record<ModuleKey, boolean> | undefined)
   );
   const [isSaving, setIsSaving] = useState(false);
+  const [branding, setBranding] = useState(() => ({
+    sidebarStart: localStorage.getItem("mt.sidebarStart") ?? "#0F172A",
+    sidebarEnd: localStorage.getItem("mt.sidebarEnd") ?? "#0B1220",
+    sidebarAccent: localStorage.getItem("mt.sidebarAccent") ?? "#1D4ED8",
+    textOnSidebar: localStorage.getItem("mt.sidebarText") ?? "#E2E8F0",
+  }));
 
   useEffect(() => {
     if (workspace?.name) {
@@ -75,6 +81,18 @@ export default function Configuracoes() {
       );
     }
   }, [settings?.enabled_modules]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty("--mt-sidebar-start", branding.sidebarStart);
+    root.style.setProperty("--mt-sidebar-end", branding.sidebarEnd);
+    root.style.setProperty("--mt-sidebar-accent", branding.sidebarAccent);
+    root.style.setProperty("--mt-sidebar-text", branding.textOnSidebar);
+    localStorage.setItem("mt.sidebarStart", branding.sidebarStart);
+    localStorage.setItem("mt.sidebarEnd", branding.sidebarEnd);
+    localStorage.setItem("mt.sidebarAccent", branding.sidebarAccent);
+    localStorage.setItem("mt.sidebarText", branding.textOnSidebar);
+  }, [branding]);
 
   const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -169,14 +187,15 @@ export default function Configuracoes() {
       </div>
 
       <Tabs defaultValue="geral" className="space-y-6">
-        <TabsList className="w-full justify-start">
-          <TabsTrigger value="geral">Geral</TabsTrigger>
-          {hasModule("admin") && (
-            <TabsTrigger value="admin">Administração</TabsTrigger>
-          )}
-        </TabsList>
+      <TabsList className="w-full justify-start">
+        <TabsTrigger value="geral">Geral</TabsTrigger>
+        <TabsTrigger value="personalizacao">Personalização</TabsTrigger>
+        {hasModule("admin") && (
+          <TabsTrigger value="admin">Administração</TabsTrigger>
+        )}
+      </TabsList>
 
-        <TabsContent value="geral" className="space-y-6">
+      <TabsContent value="geral" className="space-y-6">
           <div className="grid gap-6 md:grid-cols-2">
             {/* Informações do Escritório */}
             <Card>
@@ -280,6 +299,128 @@ export default function Configuracoes() {
               )}
             </Button>
           </div>
+        </TabsContent>
+
+        <TabsContent value="personalizacao" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Paintbrush className="h-5 w-5" />
+                Personalização da Plataforma
+              </CardTitle>
+              <CardDescription>
+                Ajuste as cores principais para deixar o painel com a sua identidade.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Sidebar - cor inicial</Label>
+                  <div className="flex items-center gap-3">
+                    <Input
+                      type="color"
+                      value={branding.sidebarStart}
+                      onChange={(e) =>
+                        setBranding((prev) => ({ ...prev, sidebarStart: e.target.value }))
+                      }
+                      className="h-10 w-16 p-1"
+                    />
+                    <Input
+                      value={branding.sidebarStart}
+                      onChange={(e) =>
+                        setBranding((prev) => ({ ...prev, sidebarStart: e.target.value }))
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Sidebar - cor final</Label>
+                  <div className="flex items-center gap-3">
+                    <Input
+                      type="color"
+                      value={branding.sidebarEnd}
+                      onChange={(e) =>
+                        setBranding((prev) => ({ ...prev, sidebarEnd: e.target.value }))
+                      }
+                      className="h-10 w-16 p-1"
+                    />
+                    <Input
+                      value={branding.sidebarEnd}
+                      onChange={(e) =>
+                        setBranding((prev) => ({ ...prev, sidebarEnd: e.target.value }))
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Sidebar - cor de destaque</Label>
+                  <div className="flex items-center gap-3">
+                    <Input
+                      type="color"
+                      value={branding.sidebarAccent}
+                      onChange={(e) =>
+                        setBranding((prev) => ({ ...prev, sidebarAccent: e.target.value }))
+                      }
+                      className="h-10 w-16 p-1"
+                    />
+                    <Input
+                      value={branding.sidebarAccent}
+                      onChange={(e) =>
+                        setBranding((prev) => ({ ...prev, sidebarAccent: e.target.value }))
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Texto da sidebar</Label>
+                  <div className="flex items-center gap-3">
+                    <Input
+                      type="color"
+                      value={branding.textOnSidebar}
+                      onChange={(e) =>
+                        setBranding((prev) => ({ ...prev, textOnSidebar: e.target.value }))
+                      }
+                      className="h-10 w-16 p-1"
+                    />
+                    <Input
+                      value={branding.textOnSidebar}
+                      onChange={(e) =>
+                        setBranding((prev) => ({ ...prev, textOnSidebar: e.target.value }))
+                      }
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-white/10 bg-gradient-to-br from-slate-950 to-slate-900 p-4">
+                <p className="text-sm text-muted-foreground mb-3">Prévia da sidebar</p>
+                <div
+                  className="rounded-xl px-4 py-6 text-sm font-medium shadow-inner"
+                  style={{
+                    background: `linear-gradient(180deg, ${branding.sidebarStart}, ${branding.sidebarEnd})`,
+                    color: branding.textOnSidebar,
+                  }}
+                >
+                  <div className="mb-4 text-xs uppercase tracking-[0.2em] opacity-70">
+                    Maxtabil
+                  </div>
+                  <div className="space-y-2">
+                    <div
+                      className="rounded-md px-3 py-2"
+                      style={{ backgroundColor: `${branding.sidebarAccent}33` }}
+                    >
+                      Dashboard
+                    </div>
+                    <div className="rounded-md px-3 py-2 opacity-80">Financeiro</div>
+                    <div className="rounded-md px-3 py-2 opacity-80">Administração</div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {hasModule("admin") && (
