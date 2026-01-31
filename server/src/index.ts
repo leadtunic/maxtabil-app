@@ -2246,9 +2246,11 @@ app.post("/api/billing/lifetime", async (request, reply) => {
   const paymentUrlRaw =
     billingResult?.data?.url || billingResult?.url || billingResult?.data?.paymentUrl;
   const billingId =
-    typeof billingIdRaw === "string" || typeof billingIdRaw === "number"
+    billingIdRaw == null
+      ? null
+      : typeof billingIdRaw === "string" || typeof billingIdRaw === "number"
       ? String(billingIdRaw)
-      : null;
+      : JSON.stringify(billingIdRaw);
   const paymentUrl =
     typeof paymentUrlRaw === "string" || typeof paymentUrlRaw === "number"
       ? String(paymentUrlRaw)
