@@ -2175,13 +2175,13 @@ app.post("/api/billing/lifetime", async (request, reply) => {
     return;
   }
 
-  const bundle = await getWorkspaceBundle(sessionData.user);
-  if (!bundle?.workspace) {
+  const workspace = await ensureWorkspace(sessionData.user);
+  if (!workspace) {
     reply.status(500).send({ message: "WORKSPACE_CREATE_FAILED" });
     return;
   }
 
-  const rawWorkspaceId = String(bundle.workspace.id);
+  const rawWorkspaceId = String(workspace.id);
   const entitlement = await ensureEntitlement(rawWorkspaceId);
   if (entitlement?.lifetime_access) {
     reply.status(400).send({ message: "Acesso vitalício já está ativo." });
