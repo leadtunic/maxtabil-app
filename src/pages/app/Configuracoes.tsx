@@ -8,9 +8,14 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Loader2, Upload, Settings, Building2, Lock } from "lucide-react";
+import { Loader2, Upload, Settings, Building2, Lock, ShieldCheck } from "lucide-react";
 import type { ModuleKey, Workspace, WorkspaceSettings } from "@/types/supabase";
+import AdminUsuarios from "@/pages/app/admin/AdminUsuarios";
+import AdminLinks from "@/pages/app/admin/AdminLinks";
+import AdminRegras from "@/pages/app/admin/AdminRegras";
+import AdminAuditoria from "@/pages/app/admin/AdminAuditoria";
 
 type UploadResponse = {
   path?: string;
@@ -27,7 +32,7 @@ const AVAILABLE_MODULES: { key: ModuleKey; label: string }[] = [
 ];
 
 export default function Configuracoes() {
-  const { workspace, settings, refreshWorkspace } = useAuth();
+  const { workspace, settings, refreshWorkspace, hasModule } = useAuth();
   const [searchParams] = useSearchParams();
   const moduleParam = searchParams.get("module") as ModuleKey | null;
   const moduleContext = AVAILABLE_MODULES.find((module) => module.key === moduleParam) ?? null;
@@ -163,112 +168,159 @@ export default function Configuracoes() {
         )}
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* Informações do Escritório */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Building2 className="h-5 w-5" />
-              Informações do Escritório
-            </CardTitle>
-            <CardDescription>
-              Nome e identidade visual
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Nome do Escritório</Label>
-              <Input
-                id="name"
-                value={workspaceName}
-                onChange={(e) => setWorkspaceName(e.target.value)}
-                placeholder="Meu Escritório"
-              />
-            </div>
+      <Tabs defaultValue="geral" className="space-y-6">
+        <TabsList className="w-full justify-start">
+          <TabsTrigger value="geral">Geral</TabsTrigger>
+          {hasModule("admin") && (
+            <TabsTrigger value="admin">Administração</TabsTrigger>
+          )}
+        </TabsList>
 
-            <div className="space-y-2">
-              <Label>Logo</Label>
-              <div className="flex items-center gap-4">
-                {logoPreview || workspace?.logo_path ? (
-                  <img
-                    src={logoPreview || buildApiUrl(`/api/storage/workspace-logos/${workspace?.logo_path}`)}
-                    alt="Logo"
-                    className="w-16 h-16 object-contain rounded-lg bg-slate-100"
+        <TabsContent value="geral" className="space-y-6">
+          <div className="grid gap-6 md:grid-cols-2">
+            {/* Informações do Escritório */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Building2 className="h-5 w-5" />
+                  Informações do Escritório
+                </CardTitle>
+                <CardDescription>
+                  Nome e identidade visual
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Nome do Escritório</Label>
+                  <Input
+                    id="name"
+                    value={workspaceName}
+                    onChange={(e) => setWorkspaceName(e.target.value)}
+                    placeholder="Meu Escritório"
                   />
-                ) : (
-                  <div className="w-16 h-16 rounded-lg bg-slate-100 flex items-center justify-center">
-                    <Upload className="w-6 h-6 text-slate-400" />
-                  </div>
-                )}
-                <Input
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp"
-                  onChange={handleLogoChange}
-                  className="flex-1"
-                />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+                </div>
 
-        {/* Módulos */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Lock className="h-5 w-5" />
-              Módulos Ativos
-            </CardTitle>
-            <CardDescription>
-              Controle quais módulos estão disponíveis
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {AVAILABLE_MODULES.map((module) => {
-                const isAdmin = module.key === "admin";
-                return (
-                  <div
-                    key={module.key}
-                    className={`flex items-center justify-between rounded-lg border px-3 py-2 transition-colors ${
-                      isAdmin ? "cursor-not-allowed opacity-70" : "hover:bg-muted/50"
-                    }`}
-                  >
-                    <div>
-                      <p className="font-medium">{module.label}</p>
-                      {isAdmin && (
-                        <p className="text-xs text-muted-foreground">Sempre habilitado</p>
-                      )}
-                    </div>
-                    <Checkbox
-                      checked={enabledModules[module.key]}
-                      onCheckedChange={isAdmin ? undefined : () => toggleModule(module.key)}
-                      disabled={isAdmin}
+                <div className="space-y-2">
+                  <Label>Logo</Label>
+                  <div className="flex items-center gap-4">
+                    {logoPreview || workspace?.logo_path ? (
+                      <img
+                        src={logoPreview || buildApiUrl(`/api/storage/workspace-logos/${workspace?.logo_path}`)}
+                        alt="Logo"
+                        className="w-16 h-16 object-contain rounded-lg bg-slate-100"
+                      />
+                    ) : (
+                      <div className="w-16 h-16 rounded-lg bg-slate-100 flex items-center justify-center">
+                        <Upload className="w-6 h-6 text-slate-400" />
+                      </div>
+                    )}
+                    <Input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      onChange={handleLogoChange}
+                      className="flex-1"
                     />
                   </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+                </div>
+              </CardContent>
+            </Card>
 
-      <Separator />
+            {/* Módulos */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Lock className="h-5 w-5" />
+                  Módulos Ativos
+                </CardTitle>
+                <CardDescription>
+                  Controle quais módulos estão disponíveis
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {AVAILABLE_MODULES.map((module) => {
+                    const isAdmin = module.key === "admin";
+                    return (
+                      <div
+                        key={module.key}
+                        className={`flex items-center justify-between rounded-lg border px-3 py-2 transition-colors ${
+                          isAdmin ? "cursor-not-allowed opacity-70" : "hover:bg-muted/50"
+                        }`}
+                      >
+                        <div>
+                          <p className="font-medium">{module.label}</p>
+                          {isAdmin && (
+                            <p className="text-xs text-muted-foreground">Sempre habilitado</p>
+                          )}
+                        </div>
+                        <Checkbox
+                          checked={enabledModules[module.key]}
+                          onCheckedChange={isAdmin ? undefined : () => toggleModule(module.key)}
+                          disabled={isAdmin}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
 
-      <div className="flex justify-end">
-        <Button
-          onClick={handleSave}
-          disabled={isSaving}
-        >
-          {isSaving ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Salvando...
-            </>
-          ) : (
-            "Salvar alterações"
-          )}
-        </Button>
-      </div>
+          <Separator />
+
+          <div className="flex justify-end">
+            <Button onClick={handleSave} disabled={isSaving}>
+              {isSaving ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Salvando...
+                </>
+              ) : (
+                "Salvar alterações"
+              )}
+            </Button>
+          </div>
+        </TabsContent>
+
+        {hasModule("admin") && (
+          <TabsContent value="admin" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ShieldCheck className="h-5 w-5" />
+                  Administração
+                </CardTitle>
+                <CardDescription>
+                  Gerencie usuários, links, regras e auditoria direto nas configurações
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Tabs defaultValue="usuarios" className="space-y-6">
+                  <TabsList className="w-full justify-start">
+                    <TabsTrigger value="usuarios">Usuários</TabsTrigger>
+                    <TabsTrigger value="links">Links</TabsTrigger>
+                    <TabsTrigger value="regras">Regras</TabsTrigger>
+                    <TabsTrigger value="auditoria">Auditoria</TabsTrigger>
+                  </TabsList>
+
+                  <TabsContent value="usuarios">
+                    <AdminUsuarios />
+                  </TabsContent>
+                  <TabsContent value="links">
+                    <AdminLinks />
+                  </TabsContent>
+                  <TabsContent value="regras">
+                    <AdminRegras />
+                  </TabsContent>
+                  <TabsContent value="auditoria">
+                    <AdminAuditoria />
+                  </TabsContent>
+                </Tabs>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+      </Tabs>
     </div>
   );
 }

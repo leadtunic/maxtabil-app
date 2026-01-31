@@ -23,16 +23,20 @@ import SimuladorHonorarios from "./pages/app/financeiro/SimuladorHonorarios";
 import BpoDashboard from "./pages/app/financeiro/bpo/Dashboard";
 import BpoClients from "./pages/app/financeiro/bpo/Clients";
 import BpoTasks from "./pages/app/financeiro/bpo/Tasks";
+import FinanceiroWorkspace from "./pages/app/financeiro/Workspace";
 import DepartamentoPessoal from "./pages/app/dp/DepartamentoPessoal";
+import DepartamentoPessoalWorkspace from "./pages/app/dp/Workspace";
 import FiscalContabil from "./pages/app/fiscal-contabil/FiscalContabil";
+import FiscalContabilWorkspace from "./pages/app/fiscal-contabil/Workspace";
 import Legalizacao from "./pages/app/legalizacao/Legalizacao";
+import LegalizacaoWorkspace from "./pages/app/legalizacao/Workspace";
 import CertificadoDigital from "./pages/app/certificado-digital/CertificadoDigital";
+import CertificadoDigitalWorkspace from "./pages/app/certificado-digital/Workspace";
 import AdminUsuarios from "./pages/app/admin/AdminUsuarios";
 import AdminLinks from "./pages/app/admin/AdminLinks";
 import AdminRegras from "./pages/app/admin/AdminRegras";
 import AdminAuditoria from "./pages/app/admin/AdminAuditoria";
 import Configuracoes from "./pages/app/Configuracoes";
-import WorkspacePlaceholder from "./pages/app/WorkspacePlaceholder";
 
 const queryClient = new QueryClient();
 
@@ -72,40 +76,25 @@ const App = () => (
               <Route path="financeiro/bpo" element={<BpoDashboard />} />
               <Route path="financeiro/bpo/clients" element={<BpoClients />} />
               <Route path="financeiro/bpo/tasks" element={<BpoTasks />} />
-              <Route
-                path="financeiro/workspace"
-                element={<WorkspacePlaceholder title="Workspace Financeiro" moduleKey="financeiro" />}
-              />
+              <Route path="financeiro/workspace" element={<FinanceiroWorkspace />} />
               
               {/* DP */}
               <Route path="dp" element={<DepartamentoPessoal />} />
               <Route path="dp/rescisao" element={<DepartamentoPessoal defaultTab="rescisao" />} />
               <Route path="dp/ferias" element={<DepartamentoPessoal defaultTab="ferias" />} />
-              <Route
-                path="dp/workspace"
-                element={<WorkspacePlaceholder title="Workspace DP" moduleKey="dp" />}
-              />
+              <Route path="dp/workspace" element={<DepartamentoPessoalWorkspace />} />
               
               {/* Fiscal/Contábil */}
               <Route path="fiscal-contabil" element={<FiscalContabil />} />
-              <Route
-                path="fiscal-contabil/workspace"
-                element={<WorkspacePlaceholder title="Workspace Fiscal/Contábil" moduleKey="fiscal_contabil" />}
-              />
+              <Route path="fiscal-contabil/workspace" element={<FiscalContabilWorkspace />} />
               
               {/* Legalização */}
               <Route path="legalizacao" element={<Legalizacao />} />
-              <Route
-                path="legalizacao/workspace"
-                element={<WorkspacePlaceholder title="Workspace Legalização" moduleKey="legalizacao" />}
-              />
+              <Route path="legalizacao/workspace" element={<LegalizacaoWorkspace />} />
               
               {/* Certificado Digital */}
               <Route path="certificado-digital" element={<CertificadoDigital />} />
-              <Route
-                path="certificado-digital/workspace"
-                element={<WorkspacePlaceholder title="Workspace Certificado Digital" moduleKey="certificado_digital" />}
-              />
+              <Route path="certificado-digital/workspace" element={<CertificadoDigitalWorkspace />} />
               
               {/* Admin */}
               <Route path="admin/usuarios" element={<AdminUsuarios />} />
