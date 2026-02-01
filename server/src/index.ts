@@ -276,7 +276,33 @@ const allowedRoles = new Set([
   "DP",
   "FISCAL_CONTABIL",
   "LEGALIZACAO_CERT",
+  "FINANCEIRO_SENIOR",
+  "FINANCEIRO_JUNIOR",
+  "VENDEDOR_SENIOR",
+  "VENDEDOR_JUNIOR",
+  "COMPRADOR",
 ]);
+
+const workspaceRoles = new Set([
+  "ADMIN",
+  "FINANCEIRO",
+  "DP",
+  "FISCAL_CONTABIL",
+  "LEGALIZACAO_CERT",
+  "FINANCEIRO_SENIOR",
+  "FINANCEIRO_JUNIOR",
+  "VENDEDOR_SENIOR",
+  "VENDEDOR_JUNIOR",
+  "COMPRADOR",
+]);
+
+type WorkspaceMember = {
+  workspace_id: string;
+  user_id: string;
+  role: string;
+  permissions: JsonValue;
+  is_active: boolean;
+};
 
 const getWorkspaceForUser = async (userId: string) => {
   return (await sql`
@@ -285,6 +311,74 @@ const getWorkspaceForUser = async (userId: string) => {
     where owner_user_id = ${userId}
     limit 1
   `)[0];
+};
+
+const getWorkspaceForMember = async (userId: string) => {
+  return (await sql`
+    select w.*
+    from workspace_members wm
+    join workspaces w on w.id = wm.workspace_id
+    where wm.user_id = ${userId}
+      and wm.is_active = true
+    order by wm.created_at asc
+    limit 1
+  `)[0];
+};
+
+const getWorkspaceMember = async (workspaceId: string, userId: string) => {
+  return (await sql`
+    select *
+    from workspace_members
+    where workspace_id = ${workspaceId}
+      and user_id = ${userId}
+      and is_active = true
+    limit 1
+  `)[0] as WorkspaceMember | undefined;
+};
+
+const ensureWorkspaceMember = async (
+  workspaceId: string,
+  userId: string,
+  role: string,
+  permissions: JsonValue = {}
+) => {
+  await sql`
+    insert into workspace_members (workspace_id, user_id, role, permissions, is_active)
+    values (${workspaceId}, ${userId}, ${role}, ${sql.json(asJsonValue(permissions))}, ${true})
+    on conflict (workspace_id, user_id) do update
+      set role = excluded.role,
+          permissions = excluded.permissions,
+          is_active = true,
+          updated_at = ${new Date()}
+  `;
+};
+
+const requireWorkspaceContext = async (
+  request: FastifyRequest,
+  reply: FastifyReply,
+  allowedWorkspaceRoles?: Set<string>
+) => {
+  const sessionData = await requireSession(request, reply);
+  if (!sessionData) return null;
+
+  const workspace = await ensureWorkspace(sessionData.user);
+  if (!workspace) {
+    reply.status(500).send({ error: "WORKSPACE_CREATE_FAILED" });
+    return null;
+  }
+
+  const member = await getWorkspaceMember(workspace.id, sessionData.user.id);
+  if (!member) {
+    reply.status(403).send({ error: "WORKSPACE_ACCESS_DENIED" });
+    return null;
+  }
+
+  if (allowedWorkspaceRoles && !allowedWorkspaceRoles.has(member.role)) {
+    reply.status(403).send({ error: "WORKSPACE_ROLE_REQUIRED" });
+    return null;
+  }
+
+  return { sessionData, workspace, member };
 };
 
 const seedDefaultRuleSets = async (workspaceId: string, userId: string) => {
@@ -320,6 +414,12 @@ const ensureWorkspace = async (user: AuthUser) => {
   const email = user.email || "user@example.com";
   const displayName = user.name || email.split("@")[0] || "Usuário";
   let workspace = await getWorkspaceForUser(user.id);
+  let isOwner = true;
+
+  if (!workspace) {
+    workspace = await getWorkspaceForMember(user.id);
+    isOwner = false;
+  }
 
   if (!workspace) {
     const slug = generateSlug(email);
@@ -343,6 +443,11 @@ const ensureWorkspace = async (user: AuthUser) => {
 
       await seedDefaultRuleSets(workspace.id, user.id);
     }
+    isOwner = true;
+  }
+
+  if (workspace?.id && isOwner) {
+    await ensureWorkspaceMember(workspace.id, user.id, "ADMIN");
   }
 
   return workspace ?? null;
@@ -423,16 +528,14 @@ app.get("/api/allowlist/check", async (request) => {
 });
 
 app.get("/api/workspace/bootstrap", async (request, reply) => {
-  const sessionData = await requireSession(request, reply);
-  if (!sessionData) return;
+  const context = await requireWorkspaceContext(request, reply);
+  if (!context) return;
 
-  const bundle = await getWorkspaceBundle(sessionData.user);
-  if (!bundle) {
-    reply.status(500).send({ error: "WORKSPACE_CREATE_FAILED" });
-    return;
-  }
+  const { sessionData, workspace, member } = context;
+  const settings = await ensureWorkspaceSettings(workspace.id);
+  const entitlement = await ensureEntitlement(workspace.id);
 
-  return bundle;
+  return { workspace, settings, entitlement, member };
 });
 
 app.get("/api/links", async (request, reply) => {
@@ -1249,17 +1352,14 @@ app.delete("/api/home-recados/:id", async (request, reply) => {
   return { ok: true };
 });
 
+const bpoRoles = new Set(["ADMIN", "FINANCEIRO_SENIOR", "FINANCEIRO_JUNIOR"]);
+
 app.get("/api/bpo/clients", async (request, reply) => {
-  const sessionData = await requireSession(request, reply);
-  if (!sessionData) return;
+  const context = await requireWorkspaceContext(request, reply, bpoRoles);
+  if (!context) return;
+  const { workspace } = context;
 
   const { activeOnly } = request.query as { activeOnly?: string };
-
-  const workspace = await ensureWorkspace(sessionData.user);
-  if (!workspace) {
-    reply.status(500).send({ message: "WORKSPACE_CREATE_FAILED" });
-    return;
-  }
 
   const rows = activeOnly === "true"
     ? await sql`
@@ -1280,8 +1380,9 @@ app.get("/api/bpo/clients", async (request, reply) => {
 });
 
 app.post("/api/bpo/clients", async (request, reply) => {
-  const sessionData = await requireSession(request, reply);
-  if (!sessionData) return;
+  const context = await requireWorkspaceContext(request, reply, bpoRoles);
+  if (!context) return;
+  const { workspace } = context;
 
   const body = request.body as {
     name?: string;
@@ -1296,12 +1397,6 @@ app.post("/api/bpo/clients", async (request, reply) => {
   const name = body?.name?.trim();
   if (!name) {
     reply.status(400).send({ message: "Nome do cliente obrigatório." });
-    return;
-  }
-
-  const workspace = await ensureWorkspace(sessionData.user);
-  if (!workspace) {
-    reply.status(500).send({ message: "WORKSPACE_CREATE_FAILED" });
     return;
   }
 
@@ -1333,8 +1428,9 @@ app.post("/api/bpo/clients", async (request, reply) => {
 });
 
 app.put("/api/bpo/clients/:id", async (request, reply) => {
-  const sessionData = await requireSession(request, reply);
-  if (!sessionData) return;
+  const context = await requireWorkspaceContext(request, reply, bpoRoles);
+  if (!context) return;
+  const { workspace } = context;
 
   const { id } = request.params as { id?: string };
   if (!id) {
@@ -1355,12 +1451,6 @@ app.put("/api/bpo/clients/:id", async (request, reply) => {
   const name = body?.name?.trim();
   if (!name) {
     reply.status(400).send({ message: "Nome do cliente obrigatório." });
-    return;
-  }
-
-  const workspace = await ensureWorkspace(sessionData.user);
-  if (!workspace) {
-    reply.status(500).send({ message: "WORKSPACE_CREATE_FAILED" });
     return;
   }
 
@@ -1388,18 +1478,13 @@ app.put("/api/bpo/clients/:id", async (request, reply) => {
 });
 
 app.delete("/api/bpo/clients/:id", async (request, reply) => {
-  const sessionData = await requireSession(request, reply);
-  if (!sessionData) return;
+  const context = await requireWorkspaceContext(request, reply, bpoRoles);
+  if (!context) return;
+  const { workspace } = context;
 
   const { id } = request.params as { id?: string };
   if (!id) {
     reply.status(400).send({ message: "ID do cliente obrigatório." });
-    return;
-  }
-
-  const workspace = await ensureWorkspace(sessionData.user);
-  if (!workspace) {
-    reply.status(500).send({ message: "WORKSPACE_CREATE_FAILED" });
     return;
   }
 
@@ -1419,14 +1504,9 @@ app.delete("/api/bpo/clients/:id", async (request, reply) => {
 });
 
 app.get("/api/bpo/tasks", async (request, reply) => {
-  const sessionData = await requireSession(request, reply);
-  if (!sessionData) return;
-
-  const workspace = await ensureWorkspace(sessionData.user);
-  if (!workspace) {
-    reply.status(500).send({ message: "WORKSPACE_CREATE_FAILED" });
-    return;
-  }
+  const context = await requireWorkspaceContext(request, reply, bpoRoles);
+  if (!context) return;
+  const { workspace } = context;
 
   const rows = await sql`
     select t.*, json_build_object('id', c.id, 'name', c.name) as bpo_clients
@@ -1440,18 +1520,13 @@ app.get("/api/bpo/tasks", async (request, reply) => {
 });
 
 app.get("/api/bpo/clients/:id/timeline", async (request, reply) => {
-  const sessionData = await requireSession(request, reply);
-  if (!sessionData) return;
+  const context = await requireWorkspaceContext(request, reply, bpoRoles);
+  if (!context) return;
+  const { workspace } = context;
 
   const { id } = request.params as { id?: string };
   if (!id) {
     reply.status(400).send({ message: "ID do cliente obrigatório." });
-    return;
-  }
-
-  const workspace = await ensureWorkspace(sessionData.user);
-  if (!workspace) {
-    reply.status(500).send({ message: "WORKSPACE_CREATE_FAILED" });
     return;
   }
 
@@ -1488,8 +1563,9 @@ app.get("/api/bpo/clients/:id/timeline", async (request, reply) => {
 });
 
 app.post("/api/bpo/tasks", async (request, reply) => {
-  const sessionData = await requireSession(request, reply);
-  if (!sessionData) return;
+  const context = await requireWorkspaceContext(request, reply, bpoRoles);
+  if (!context) return;
+  const { workspace } = context;
 
   const body = request.body as {
     client_id?: string;
@@ -1505,12 +1581,6 @@ app.post("/api/bpo/tasks", async (request, reply) => {
   const title = body?.title?.trim();
   if (!body?.client_id || !title || !body?.category) {
     reply.status(400).send({ message: "Dados inválidos para tarefa." });
-    return;
-  }
-
-  const workspace = await ensureWorkspace(sessionData.user);
-  if (!workspace) {
-    reply.status(500).send({ message: "WORKSPACE_CREATE_FAILED" });
     return;
   }
 
@@ -1562,8 +1632,9 @@ app.post("/api/bpo/tasks", async (request, reply) => {
 });
 
 app.put("/api/bpo/tasks/:id", async (request, reply) => {
-  const sessionData = await requireSession(request, reply);
-  if (!sessionData) return;
+  const context = await requireWorkspaceContext(request, reply, bpoRoles);
+  if (!context) return;
+  const { workspace } = context;
 
   const { id } = request.params as { id?: string };
   if (!id) {
@@ -1585,12 +1656,6 @@ app.put("/api/bpo/tasks/:id", async (request, reply) => {
   const title = body?.title?.trim();
   if (!body?.client_id || !title || !body?.category) {
     reply.status(400).send({ message: "Dados inválidos para tarefa." });
-    return;
-  }
-
-  const workspace = await ensureWorkspace(sessionData.user);
-  if (!workspace) {
-    reply.status(500).send({ message: "WORKSPACE_CREATE_FAILED" });
     return;
   }
 
@@ -1636,18 +1701,13 @@ app.put("/api/bpo/tasks/:id", async (request, reply) => {
 });
 
 app.delete("/api/bpo/tasks/:id", async (request, reply) => {
-  const sessionData = await requireSession(request, reply);
-  if (!sessionData) return;
+  const context = await requireWorkspaceContext(request, reply, bpoRoles);
+  if (!context) return;
+  const { workspace } = context;
 
   const { id } = request.params as { id?: string };
   if (!id) {
     reply.status(400).send({ message: "ID da tarefa obrigatório." });
-    return;
-  }
-
-  const workspace = await ensureWorkspace(sessionData.user);
-  if (!workspace) {
-    reply.status(500).send({ message: "WORKSPACE_CREATE_FAILED" });
     return;
   }
 
@@ -1667,18 +1727,13 @@ app.delete("/api/bpo/tasks/:id", async (request, reply) => {
 });
 
 app.post("/api/bpo/tasks/:id/complete", async (request, reply) => {
-  const sessionData = await requireSession(request, reply);
-  if (!sessionData) return;
+  const context = await requireWorkspaceContext(request, reply, bpoRoles);
+  if (!context) return;
+  const { workspace } = context;
 
   const { id } = request.params as { id?: string };
   if (!id) {
     reply.status(400).send({ message: "ID da tarefa obrigatório." });
-    return;
-  }
-
-  const workspace = await ensureWorkspace(sessionData.user);
-  if (!workspace) {
-    reply.status(500).send({ message: "WORKSPACE_CREATE_FAILED" });
     return;
   }
 
@@ -1701,14 +1756,9 @@ app.post("/api/bpo/tasks/:id/complete", async (request, reply) => {
 });
 
 app.get("/api/bpo/summary", async (request, reply) => {
-  const sessionData = await requireSession(request, reply);
-  if (!sessionData) return;
-
-  const workspace = await ensureWorkspace(sessionData.user);
-  if (!workspace) {
-    reply.status(500).send({ message: "WORKSPACE_CREATE_FAILED" });
-    return;
-  }
+  const context = await requireWorkspaceContext(request, reply, bpoRoles);
+  if (!context) return;
+  const { workspace } = context;
 
   const clients = (await sql`
     select is_active
@@ -1749,14 +1799,9 @@ app.get("/api/bpo/summary", async (request, reply) => {
 });
 
 app.get("/api/bpo/insights", async (request, reply) => {
-  const sessionData = await requireSession(request, reply);
-  if (!sessionData) return;
-
-  const workspace = await ensureWorkspace(sessionData.user);
-  if (!workspace) {
-    reply.status(500).send({ message: "WORKSPACE_CREATE_FAILED" });
-    return;
-  }
+  const context = await requireWorkspaceContext(request, reply, bpoRoles);
+  if (!context) return;
+  const { workspace } = context;
 
   const statusRows = (await sql`
     select status, count(*)::int as count
@@ -1804,8 +1849,9 @@ app.get("/api/bpo/insights", async (request, reply) => {
 });
 
 app.get("/api/admin/users", async (request, reply) => {
-  const sessionData = await requireSession(request, reply);
-  if (!sessionData) return;
+  const context = await requireWorkspaceContext(request, reply, new Set(["ADMIN"]));
+  if (!context) return;
+  const { workspace } = context;
 
   const query = request.query as {
     search?: string;
@@ -1825,35 +1871,46 @@ app.get("/api/admin/users", async (request, reply) => {
   const offset = (page - 1) * pageSize;
 
   const filters: string[] = [];
-  const values: Array<string | number | boolean> = [];
+  const values: Array<string | number | boolean> = [workspace.id];
 
   if (search) {
+    const emailParam = values.length + 1;
+    const nameParam = values.length + 2;
     values.push(`%${search}%`, `%${search}%`);
     filters.push(
-      `(email ilike $${values.length - 1} or display_name ilike $${values.length})`
+      `(p.email ilike $${emailParam} or p.display_name ilike $${nameParam})`
     );
   }
   if (status === "ACTIVE") {
     values.push(true);
-    filters.push(`is_active = $${values.length}`);
+    filters.push(`wm.is_active = $${values.length}`);
   }
   if (status === "DISABLED") {
     values.push(false);
-    filters.push(`is_active = $${values.length}`);
+    filters.push(`wm.is_active = $${values.length}`);
   }
 
-  const whereClause = filters.length ? `where ${filters.join(" and ")}` : "";
+  const whereClause = `where wm.workspace_id = $1${
+    filters.length ? ` and ${filters.join(" and ")}` : ""
+  }`;
 
   values.push(pageSize, offset);
   const rows = await sql.unsafe(
-    `select * from profiles ${whereClause} order by created_at desc limit $${
+    `select p.*, wm.role as workspace_role, wm.is_active as workspace_active
+     from profiles p
+     join workspace_members wm on wm.user_id = p.user_id
+     ${whereClause}
+     order by p.created_at desc limit $${
       values.length - 1
     } offset $${values.length}`,
     values
   );
 
   const countResult = await sql.unsafe(
-    `select count(*) as count from profiles ${whereClause}`,
+    `select count(*) as count
+     from profiles p
+     join workspace_members wm on wm.user_id = p.user_id
+     ${whereClause}`,
     values.slice(0, values.length - 2)
   );
 
@@ -1864,8 +1921,9 @@ app.get("/api/admin/users", async (request, reply) => {
 });
 
 app.post("/api/admin/users", async (request, reply) => {
-  const sessionData = await requireSession(request, reply);
-  if (!sessionData) return;
+  const context = await requireWorkspaceContext(request, reply, new Set(["ADMIN"]));
+  if (!context) return;
+  const { sessionData, workspace } = context;
 
   const body = request.body as {
     email?: string;
@@ -1884,8 +1942,8 @@ app.post("/api/admin/users", async (request, reply) => {
     return;
   }
 
-  if (!allowedRoles.has(role)) {
-    reply.status(400).send({ message: "Perfil inválido." });
+  if (!allowedRoles.has(role) || !workspaceRoles.has(role)) {
+    reply.status(400).send({ message: "Perfil inválido para o workspace." });
     return;
   }
 
@@ -1948,6 +2006,8 @@ app.post("/api/admin/users", async (request, reply) => {
         ${sessionData.user.id}
       )
     `;
+
+    await ensureWorkspaceMember(workspace.id, createdUser.id, role);
   } catch (error) {
     await authContext.internalAdapter.deleteUser(createdUser.id);
     throw error;
@@ -1964,7 +2024,7 @@ app.post("/api/admin/users", async (request, reply) => {
       metadata
     )
     values (
-      ${null},
+      ${workspace.id},
       ${sessionData.user.id},
       ${sessionData.user.email},
       ${"USER_CREATED"},
@@ -1978,12 +2038,25 @@ app.post("/api/admin/users", async (request, reply) => {
 });
 
 app.post("/api/admin/users/:id/reset-password", async (request, reply) => {
-  const sessionData = await requireSession(request, reply);
-  if (!sessionData) return;
+  const context = await requireWorkspaceContext(request, reply, new Set(["ADMIN"]));
+  if (!context) return;
+  const { sessionData, workspace } = context;
 
   const { id } = request.params as { id?: string };
   if (!id) {
     reply.status(400).send({ message: "ID do usuário obrigatório." });
+    return;
+  }
+
+  const targetMembership = (await sql`
+    select 1
+    from workspace_members
+    where workspace_id = ${workspace.id}
+      and user_id = ${id}
+    limit 1
+  `)[0];
+  if (!targetMembership) {
+    reply.status(404).send({ message: "Usuário não encontrado." });
     return;
   }
 
@@ -2022,7 +2095,7 @@ app.post("/api/admin/users/:id/reset-password", async (request, reply) => {
       metadata
     )
     values (
-      ${null},
+      ${workspace.id},
       ${sessionData.user.id},
       ${sessionData.user.email},
       ${"USER_PASSWORD_RESET"},
@@ -2036,12 +2109,25 @@ app.post("/api/admin/users/:id/reset-password", async (request, reply) => {
 });
 
 app.post("/api/admin/users/:id/disable", async (request, reply) => {
-  const sessionData = await requireSession(request, reply);
-  if (!sessionData) return;
+  const context = await requireWorkspaceContext(request, reply, new Set(["ADMIN"]));
+  if (!context) return;
+  const { sessionData, workspace } = context;
 
   const { id } = request.params as { id?: string };
   if (!id) {
     reply.status(400).send({ message: "ID do usuário obrigatório." });
+    return;
+  }
+
+  const targetMembership = (await sql`
+    select 1
+    from workspace_members
+    where workspace_id = ${workspace.id}
+      and user_id = ${id}
+    limit 1
+  `)[0];
+  if (!targetMembership) {
+    reply.status(404).send({ message: "Usuário não encontrado." });
     return;
   }
 
@@ -2072,7 +2158,7 @@ app.post("/api/admin/users/:id/disable", async (request, reply) => {
       metadata
     )
     values (
-      ${null},
+      ${workspace.id},
       ${sessionData.user.id},
       ${sessionData.user.email},
       ${"USER_DISABLED"},
@@ -2086,12 +2172,25 @@ app.post("/api/admin/users/:id/disable", async (request, reply) => {
 });
 
 app.post("/api/admin/users/:id/enable", async (request, reply) => {
-  const sessionData = await requireSession(request, reply);
-  if (!sessionData) return;
+  const context = await requireWorkspaceContext(request, reply, new Set(["ADMIN"]));
+  if (!context) return;
+  const { sessionData, workspace } = context;
 
   const { id } = request.params as { id?: string };
   if (!id) {
     reply.status(400).send({ message: "ID do usuário obrigatório." });
+    return;
+  }
+
+  const targetMembership = (await sql`
+    select 1
+    from workspace_members
+    where workspace_id = ${workspace.id}
+      and user_id = ${id}
+    limit 1
+  `)[0];
+  if (!targetMembership) {
+    reply.status(404).send({ message: "Usuário não encontrado." });
     return;
   }
 
@@ -2119,7 +2218,7 @@ app.post("/api/admin/users/:id/enable", async (request, reply) => {
       metadata
     )
     values (
-      ${null},
+      ${workspace.id},
       ${sessionData.user.id},
       ${sessionData.user.email},
       ${"USER_ENABLED"},
@@ -2133,12 +2232,25 @@ app.post("/api/admin/users/:id/enable", async (request, reply) => {
 });
 
 app.delete("/api/admin/users/:id", async (request, reply) => {
-  const sessionData = await requireSession(request, reply);
-  if (!sessionData) return;
+  const context = await requireWorkspaceContext(request, reply, new Set(["ADMIN"]));
+  if (!context) return;
+  const { sessionData, workspace } = context;
 
   const { id } = request.params as { id?: string };
   if (!id) {
     reply.status(400).send({ message: "ID do usuário obrigatório." });
+    return;
+  }
+
+  const targetMembership = (await sql`
+    select 1
+    from workspace_members
+    where workspace_id = ${workspace.id}
+      and user_id = ${id}
+    limit 1
+  `)[0];
+  if (!targetMembership) {
+    reply.status(404).send({ message: "Usuário não encontrado." });
     return;
   }
 
@@ -2166,7 +2278,7 @@ app.delete("/api/admin/users/:id", async (request, reply) => {
       metadata
     )
     values (
-      ${null},
+      ${workspace.id},
       ${sessionData.user.id},
       ${sessionData.user.email},
       ${"USER_DELETED"},

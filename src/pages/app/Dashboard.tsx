@@ -23,6 +23,16 @@ type SectorCard = {
   icon: typeof BarChart3;
 };
 
+type SectorGoal = {
+  sectorId: string;
+  title: string;
+  goalLabel: string;
+  goalValue: string;
+  progress: number;
+  highlight: string;
+  meta: { label: string; value: string }[];
+};
+
 const sectors: SectorCard[] = [
   {
     id: "financeiro",
@@ -92,6 +102,81 @@ const kpis = [
     value: "124",
     trend: "+8 novos",
     progress: 62,
+  },
+];
+
+const sectorGoals: SectorGoal[] = [
+  {
+    sectorId: "financeiro",
+    title: "Financeiro",
+    goalLabel: "Meta de honorarios",
+    goalValue: "R$ 320k",
+    progress: 72,
+    highlight: "+12% vs. ultimo mes",
+    meta: [
+      { label: "Receitas recorrentes", value: "R$ 210k" },
+      { label: "Boletos pendentes", value: "18" },
+    ],
+  },
+  {
+    sectorId: "bpo",
+    title: "BPO Financeiro",
+    goalLabel: "SLA de entregas",
+    goalValue: "94%",
+    progress: 84,
+    highlight: "5 clientes em alerta",
+    meta: [
+      { label: "Tarefas concluidas", value: "312" },
+      { label: "Atrasos criticos", value: "4" },
+    ],
+  },
+  {
+    sectorId: "dp",
+    title: "Departamento Pessoal",
+    goalLabel: "Prazos de folha",
+    goalValue: "100%",
+    progress: 91,
+    highlight: "2 rescisões pendentes",
+    meta: [
+      { label: "Ferias processadas", value: "28" },
+      { label: "Rescisões no mes", value: "6" },
+    ],
+  },
+  {
+    sectorId: "fiscal",
+    title: "Fiscal / Contabil",
+    goalLabel: "Compliance DAS",
+    goalValue: "98%",
+    progress: 88,
+    highlight: "1 empresa em risco",
+    meta: [
+      { label: "Fator R valido", value: "86%" },
+      { label: "Guias emitidas", value: "142" },
+    ],
+  },
+  {
+    sectorId: "legalizacao",
+    title: "Legalizacao",
+    goalLabel: "Processos ativos",
+    goalValue: "47",
+    progress: 63,
+    highlight: "8 vencimentos proximos",
+    meta: [
+      { label: "Alvaras em dia", value: "92%" },
+      { label: "Protocolos abertos", value: "14" },
+    ],
+  },
+  {
+    sectorId: "certificado",
+    title: "Certificado Digital",
+    goalLabel: "Renovacoes concluídas",
+    goalValue: "76%",
+    progress: 76,
+    highlight: "11 vencem em 30 dias",
+    meta: [
+      { label: "Certificados ativos", value: "128" },
+      { label: "Renovacoes semana", value: "9" },
+    ],
   },
 ];
 
@@ -166,6 +251,48 @@ export default function Dashboard() {
                   <Button asChild size="sm" variant="secondary">
                     <Link to={sector.href}>Abrir</Link>
                   </Button>
+                </div>
+              </div>
+            ))}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Metas por setor</CardTitle>
+          <CardDescription>
+            Acompanhe metas individuais e indicadores-chave de cada area.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {sectorGoals
+            .filter((goal) => {
+              const sector = sectors.find((item) => item.id === goal.sectorId);
+              return sector ? hasModule(sector.moduleKey) : false;
+            })
+            .map((goal) => (
+              <div
+                key={goal.sectorId}
+                className="rounded-2xl border border-border/60 bg-card/80 p-5 shadow-sm"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">{goal.goalLabel}</p>
+                    <p className="text-xl font-semibold">{goal.goalValue}</p>
+                  </div>
+                  <Badge variant="outline">{goal.title}</Badge>
+                </div>
+                <div className="mt-3 space-y-2">
+                  <Progress value={goal.progress} />
+                  <p className="text-xs text-muted-foreground">{goal.highlight}</p>
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-3 text-xs text-muted-foreground">
+                  {goal.meta.map((item) => (
+                    <div key={item.label} className="space-y-1">
+                      <p>{item.label}</p>
+                      <p className="text-sm font-semibold text-foreground">{item.value}</p>
+                    </div>
+                  ))}
                 </div>
               </div>
             ))}
