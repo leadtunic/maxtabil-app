@@ -18,6 +18,7 @@ import NotFound from "./pages/NotFound";
 
 // App Pages
 import Home from "./pages/app/Home";
+import Dashboard from "./pages/app/Dashboard";
 import SimuladorHonorarios from "./pages/app/financeiro/SimuladorHonorarios";
 import BpoDashboard from "./pages/app/financeiro/bpo/Dashboard";
 import BpoClients from "./pages/app/financeiro/bpo/Clients";
@@ -62,6 +63,7 @@ const App = () => (
             {/* Protected App Routes */}
             <Route path="/app" element={<AppShell />}>
               <Route index element={<Home />} />
+              <Route path="dashboard" element={<Dashboard />} />
               
               {/* Financeiro */}
               <Route path="financeiro/honorarios" element={<SimuladorHonorarios />} />

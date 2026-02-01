@@ -50,6 +50,12 @@ import {
   CheckCircle,
   AlertCircle,
   Loader2,
+  Sparkles,
+  Filter,
+  CalendarClock,
+  Activity,
+  LayoutGrid,
+  List,
 } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 
@@ -131,6 +137,7 @@ export default function BpoTasks() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "all">("all");
+  const [viewMode, setViewMode] = useState<"table" | "kanban">("table");
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<BpoTask | null>(null);
@@ -328,6 +335,17 @@ export default function BpoTasks() {
     return matchesSearch && matchesStatus;
   });
 
+  const tasksByStatus = STATUS_OPTIONS.reduce((acc, option) => {
+    acc[option.value] = filteredTasks.filter((task) => task.status === option.value);
+    return acc;
+  }, {} as Record<TaskStatus, BpoTask[]>);
+
+  const totalTasks = tasks.length;
+  const pendingCount = tasks.filter((task) => task.status === "pendente").length;
+  const inProgressCount = tasks.filter((task) => task.status === "em_andamento").length;
+  const completedCount = tasks.filter((task) => task.status === "concluido").length;
+  const overdueCount = tasks.filter((task) => isOverdue(task)).length;
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -341,21 +359,58 @@ export default function BpoTasks() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="flex flex-col sm:flex-row justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
+          <div className="flex items-center gap-2 text-xs uppercase tracking-[0.3em] text-muted-foreground">
+            <Sparkles className="h-4 w-4" />
+            BPO Financeiro
+          </div>
+          <h1 className="mt-2 text-2xl font-bold flex items-center gap-2">
             <ClipboardList className="h-6 w-6" />
             Tarefas BPO
           </h1>
           <p className="text-muted-foreground">
-            Gerencie as tarefas de BPO financeiro
+            Fluxo de execução, prioridades e prazos por cliente
           </p>
         </div>
         <Button onClick={openNewDialog}>
           <Plus className="h-4 w-4 mr-2" />
           Nova Tarefa
         </Button>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-5">
+        <Card>
+          <CardHeader className="space-y-1">
+            <CardDescription>Total</CardDescription>
+            <CardTitle className="text-2xl">{totalTasks}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="space-y-1">
+            <CardDescription>Pendentes</CardDescription>
+            <CardTitle className="text-2xl">{pendingCount}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="space-y-1">
+            <CardDescription>Em andamento</CardDescription>
+            <CardTitle className="text-2xl">{inProgressCount}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="space-y-1">
+            <CardDescription>Concluídas</CardDescription>
+            <CardTitle className="text-2xl">{completedCount}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="space-y-1">
+            <CardDescription>Em atraso</CardDescription>
+            <CardTitle className="text-2xl text-red-500">{overdueCount}</CardTitle>
+          </CardHeader>
+        </Card>
       </div>
 
       <Card>
@@ -367,32 +422,58 @@ export default function BpoTasks() {
                 {filteredTasks.length} tarefa{filteredTasks.length !== 1 ? "s" : ""}
               </CardDescription>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1 rounded-full border border-border px-1 py-1 text-xs text-muted-foreground">
+                <Button
+                  type="button"
+                  variant={viewMode === "table" ? "default" : "ghost"}
+                  size="sm"
+                  className="h-8 px-3"
+                  onClick={() => setViewMode("table")}
+                >
+                  <List className="h-3 w-3 mr-1" />
+                  Lista
+                </Button>
+                <Button
+                  type="button"
+                  variant={viewMode === "kanban" ? "default" : "ghost"}
+                  size="sm"
+                  className="h-8 px-3"
+                  onClick={() => setViewMode("kanban")}
+                >
+                  <LayoutGrid className="h-3 w-3 mr-1" />
+                  Kanban
+                </Button>
+              </div>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   placeholder="Buscar..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9 w-full sm:w-48"
+                  className="pl-9 w-full sm:w-52"
                 />
               </div>
-              <Select
-                value={statusFilter}
-                onValueChange={(v) => setStatusFilter(v as TaskStatus | "all")}
-              >
-                <SelectTrigger className="w-[150px]">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  {STATUS_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex items-center gap-1 rounded-full border border-border px-2 py-1 text-xs text-muted-foreground">
+                <Filter className="h-3 w-3" />
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter("all")}
+                  className={`rounded-full px-2 py-1 ${statusFilter === "all" ? "bg-primary/10 text-primary" : ""}`}
+                >
+                  Todas
+                </button>
+                {STATUS_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setStatusFilter(opt.value)}
+                    className={`rounded-full px-2 py-1 ${statusFilter === opt.value ? "bg-primary/10 text-primary" : ""}`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </CardHeader>
@@ -414,81 +495,186 @@ export default function BpoTasks() {
               )}
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Título</TableHead>
-                    <TableHead>Cliente</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Prioridade</TableHead>
-                    <TableHead>Vencimento</TableHead>
-                    <TableHead className="w-12"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredTasks.map((task) => (
-                    <TableRow
-                      key={task.id}
-                      className={isOverdue(task) ? "bg-red-50" : undefined}
-                    >
-                      <TableCell className="font-medium">
-                        <div className="flex items-center gap-2">
-                          {task.title}
-                          {isOverdue(task) && (
-                            <AlertCircle className="h-4 w-4 text-red-500" />
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>{task.bpo_clients?.name || "-"}</TableCell>
-                      <TableCell>
-                        <Badge variant={STATUS_BADGE_VARIANT[task.status]}>
-                          {STATUS_OPTIONS.find((o) => o.value === task.status)?.label}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <span className={PRIORITY_COLORS[task.priority]}>
-                          {PRIORITY_OPTIONS.find((o) => o.value === task.priority)?.label}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        {task.due_date
-                          ? format(new Date(task.due_date), "dd/MM/yyyy", { locale: ptBR })
-                          : "-"}
-                      </TableCell>
-                      <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            {task.status !== "concluido" && (
-                              <DropdownMenuItem onClick={() => markAsCompleted(task)}>
-                                <CheckCircle className="h-4 w-4 mr-2" />
-                                Marcar como Concluída
-                              </DropdownMenuItem>
-                            )}
-                            <DropdownMenuItem onClick={() => openEditDialog(task)}>
-                              <Pencil className="h-4 w-4 mr-2" />
-                              Editar
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => handleDelete(task)}
-                              className="text-red-600"
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Excluir
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
+            viewMode === "table" ? (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Título</TableHead>
+                      <TableHead>Cliente</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Prioridade</TableHead>
+                      <TableHead>Vencimento</TableHead>
+                      <TableHead className="w-12"></TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredTasks.map((task) => (
+                      <TableRow
+                        key={task.id}
+                        className={isOverdue(task) ? "bg-red-50" : undefined}
+                      >
+                        <TableCell className="font-medium">
+                          <div className="flex items-center gap-2">
+                            {task.title}
+                            {isOverdue(task) && (
+                              <AlertCircle className="h-4 w-4 text-red-500" />
+                            )}
+                          </div>
+                          <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                            <Activity className="h-3 w-3" />
+                            {task.category
+                              ? CATEGORY_OPTIONS.find((o) => o.value === task.category)?.label
+                              : "Sem categoria"}
+                          </div>
+                        </TableCell>
+                        <TableCell>{task.bpo_clients?.name || "-"}</TableCell>
+                        <TableCell>
+                          <Badge variant={STATUS_BADGE_VARIANT[task.status]}>
+                            {STATUS_OPTIONS.find((o) => o.value === task.status)?.label}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <span className={PRIORITY_COLORS[task.priority]}>
+                            {PRIORITY_OPTIONS.find((o) => o.value === task.priority)?.label}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          {task.due_date
+                            ? format(new Date(task.due_date), "dd/MM/yyyy", { locale: ptBR })
+                            : "-"}
+                          {task.due_date && (
+                            <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                              <CalendarClock className="h-3 w-3" />
+                              {isOverdue(task) ? "Atrasada" : "No prazo"}
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              {task.status !== "concluido" && (
+                                <DropdownMenuItem onClick={() => markAsCompleted(task)}>
+                                  <CheckCircle className="h-4 w-4 mr-2" />
+                                  Marcar como Concluída
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuItem onClick={() => openEditDialog(task)}>
+                                <Pencil className="h-4 w-4 mr-2" />
+                                Editar
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => handleDelete(task)}
+                                className="text-red-600"
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Excluir
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <div className="grid gap-4 lg:grid-cols-4">
+                {STATUS_OPTIONS.map((status) => {
+                  const columnTasks = tasksByStatus[status.value];
+                  return (
+                    <div
+                      key={status.value}
+                      className="rounded-2xl border border-border/60 bg-muted/30 p-3"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Badge variant={STATUS_BADGE_VARIANT[status.value]}>
+                            {status.label}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            {columnTasks.length}
+                          </span>
+                        </div>
+                        {status.value === "pendente" && (
+                          <Button size="icon" variant="ghost" onClick={openNewDialog}>
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+
+                      <div className="mt-3 space-y-3">
+                        {columnTasks.length === 0 ? (
+                          <div className="rounded-xl border border-dashed border-border/60 p-4 text-xs text-muted-foreground">
+                            Sem tarefas aqui
+                          </div>
+                        ) : (
+                          columnTasks.map((task) => (
+                            <div
+                              key={task.id}
+                              className="rounded-xl border border-border/60 bg-background p-3 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div>
+                                  <p className="text-sm font-semibold">{task.title}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {task.bpo_clients?.name || "Sem cliente"}
+                                  </p>
+                                </div>
+                                {isOverdue(task) && (
+                                  <AlertCircle className="h-4 w-4 text-red-500" />
+                                )}
+                              </div>
+                              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                <span className="rounded-full bg-muted px-2 py-1">
+                                  {CATEGORY_OPTIONS.find((o) => o.value === task.category)?.label ||
+                                    "Sem categoria"}
+                                </span>
+                                <span className={`font-medium ${PRIORITY_COLORS[task.priority]}`}>
+                                  {PRIORITY_OPTIONS.find((o) => o.value === task.priority)?.label}
+                                </span>
+                              </div>
+                              <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                                <span>
+                                  {task.due_date
+                                    ? format(new Date(task.due_date), "dd/MM", { locale: ptBR })
+                                    : "Sem vencimento"}
+                                </span>
+                                <div className="flex items-center gap-1">
+                                  {task.status !== "concluido" && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-7 px-2 text-xs"
+                                      onClick={() => markAsCompleted(task)}
+                                    >
+                                      <CheckCircle className="h-3 w-3 mr-1" />
+                                      Concluir
+                                    </Button>
+                                  )}
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    onClick={() => openEditDialog(task)}
+                                  >
+                                    <Pencil className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )
           )}
         </CardContent>
       </Card>

@@ -37,6 +37,7 @@ import { buildApiUrl } from "@/lib/api";
 
 const mainNav = [
   { title: "Início", url: "/app", icon: Home },
+  { title: "Dashboard", url: "/app/dashboard", icon: BarChart3 },
 ];
 
 const financeiroNav = [
@@ -112,7 +113,8 @@ export function AppSidebar() {
   // Get workspace logo URL
   const getLogoUrl = () => {
     if (workspace?.logo_path) {
-      return buildApiUrl(`/api/storage/workspace-logos/${workspace.logo_path}`);
+      const version = workspace.updated_at ? `?v=${workspace.updated_at}` : "";
+      return buildApiUrl(`/api/storage/workspace-logos/${workspace.logo_path}${version}`);
     }
     return "/logo.svg";
   };
@@ -127,6 +129,9 @@ export function AppSidebar() {
                 src={getLogoUrl()}
                 alt={workspace?.name || "Maxtabil"}
                 className="w-[140px] h-auto object-contain max-h-16"
+                onError={(event) => {
+                  event.currentTarget.src = "/logo.svg";
+                }}
               />
             </div>
             {!collapsed && workspace?.name && (

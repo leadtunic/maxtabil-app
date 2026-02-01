@@ -41,6 +41,13 @@ import {
   Search,
   Building,
   Loader2,
+  Filter,
+  Sparkles,
+  Phone,
+  Mail,
+  Clock,
+  CheckCircle,
+  CalendarClock,
 } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 
@@ -58,6 +65,17 @@ interface BpoClient {
   updated_at: string;
 }
 
+interface BpoTimelineTask {
+  id: string;
+  title: string;
+  status: "pendente" | "em_andamento" | "concluido" | "cancelado";
+  category: string | null;
+  priority: string | null;
+  due_date: string | null;
+  created_at: string;
+  completed_at: string | null;
+}
+
 export default function BpoClients() {
   const { workspace } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -65,10 +83,15 @@ export default function BpoClients() {
   const [clients, setClients] = useState<BpoClient[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<BpoClient | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isTimelineOpen, setIsTimelineOpen] = useState(false);
+  const [timelineClient, setTimelineClient] = useState<BpoClient | null>(null);
+  const [timelineItems, setTimelineItems] = useState<BpoTimelineTask[]>([]);
+  const [timelineLoading, setTimelineLoading] = useState(false);
   
   // Form state
   const [formData, setFormData] = useState({
@@ -135,6 +158,25 @@ export default function BpoClients() {
     setIsDialogOpen(true);
   };
 
+  const openTimeline = async (client: BpoClient) => {
+    setTimelineClient(client);
+    setIsTimelineOpen(true);
+    setTimelineLoading(true);
+
+    try {
+      const data = await apiRequest<BpoTimelineTask[]>(
+        `/api/bpo/clients/${client.id}/timeline`
+      );
+      setTimelineItems(data || []);
+    } catch (error) {
+      console.error("Timeline error:", error);
+      toast.error("Erro ao carregar timeline");
+      setTimelineItems([]);
+    } finally {
+      setTimelineLoading(false);
+    }
+  };
+
   const handleSave = async () => {
     if (!workspace || !formData.name.trim()) {
       toast.error("Nome é obrigatório");
@@ -199,11 +241,23 @@ export default function BpoClients() {
     }
   };
 
-  const filteredClients = clients.filter((client) =>
-    client.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    client.document?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    client.contact_name?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredClients = clients.filter((client) => {
+    const matchesSearch =
+      client.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      client.document?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      client.contact_name?.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesStatus =
+      statusFilter === "all" ||
+      (statusFilter === "active" ? client.is_active : !client.is_active);
+    return matchesSearch && matchesStatus;
+  });
+
+  const totalClients = clients.length;
+  const activeClients = clients.filter((client) => client.is_active).length;
+  const inactiveClients = totalClients - activeClients;
+  const withContact = clients.filter(
+    (client) => client.contact_email || client.contact_phone
+  ).length;
 
   if (loading) {
     return (
@@ -218,21 +272,52 @@ export default function BpoClients() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="flex flex-col sm:flex-row justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
+          <div className="flex items-center gap-2 text-xs uppercase tracking-[0.3em] text-muted-foreground">
+            <Sparkles className="h-4 w-4" />
+            BPO Financeiro
+          </div>
+          <h1 className="mt-2 text-2xl font-bold flex items-center gap-2">
             <Users className="h-6 w-6" />
             Clientes BPO
           </h1>
           <p className="text-muted-foreground">
-            Gerencie seus clientes de BPO financeiro
+            Visão completa dos clientes, contatos e status operacional
           </p>
         </div>
         <Button onClick={openNewDialog}>
           <Plus className="h-4 w-4 mr-2" />
           Novo Cliente
         </Button>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-4">
+        <Card>
+          <CardHeader className="space-y-1">
+            <CardDescription>Total de clientes</CardDescription>
+            <CardTitle className="text-2xl">{totalClients}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="space-y-1">
+            <CardDescription>Ativos</CardDescription>
+            <CardTitle className="text-2xl">{activeClients}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="space-y-1">
+            <CardDescription>Inativos</CardDescription>
+            <CardTitle className="text-2xl">{inactiveClients}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="space-y-1">
+            <CardDescription>Com contato cadastrado</CardDescription>
+            <CardTitle className="text-2xl">{withContact}</CardTitle>
+          </CardHeader>
+        </Card>
       </div>
 
       <Card>
@@ -244,14 +329,40 @@ export default function BpoClients() {
                 {filteredClients.length} cliente{filteredClients.length !== 1 ? "s" : ""}
               </CardDescription>
             </div>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 w-full sm:w-64"
-              />
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9 w-full sm:w-64"
+                />
+              </div>
+              <div className="flex items-center gap-2 rounded-full border border-border px-2 py-1 text-xs text-muted-foreground">
+                <Filter className="h-3 w-3" />
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter("all")}
+                  className={`rounded-full px-2 py-1 ${statusFilter === "all" ? "bg-primary/10 text-primary" : ""}`}
+                >
+                  Todos
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter("active")}
+                  className={`rounded-full px-2 py-1 ${statusFilter === "active" ? "bg-primary/10 text-primary" : ""}`}
+                >
+                  Ativos
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter("inactive")}
+                  className={`rounded-full px-2 py-1 ${statusFilter === "inactive" ? "bg-primary/10 text-primary" : ""}`}
+                >
+                  Inativos
+                </button>
+              </div>
             </div>
           </div>
         </CardHeader>
@@ -276,7 +387,6 @@ export default function BpoClients() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Nome</TableHead>
-                    <TableHead>CNPJ/CPF</TableHead>
                     <TableHead>Contato</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="w-12"></TableHead>
@@ -285,10 +395,35 @@ export default function BpoClients() {
                 <TableBody>
                   {filteredClients.map((client) => (
                     <TableRow key={client.id}>
-                      <TableCell className="font-medium">{client.name}</TableCell>
-                      <TableCell>{client.document || "-"}</TableCell>
+                      <TableCell className="font-medium">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                            {client.name.slice(0, 2).toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="font-medium">{client.name}</p>
+                            <p className="text-xs text-muted-foreground">{client.document || "Sem documento"}</p>
+                          </div>
+                        </div>
+                      </TableCell>
                       <TableCell>
-                        {client.contact_name || client.contact_email || "-"}
+                        <div className="space-y-1">
+                          <p className="text-sm">{client.contact_name || "Contato não informado"}</p>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            {client.contact_phone && (
+                              <span className="flex items-center gap-1">
+                                <Phone className="h-3 w-3" />
+                                {client.contact_phone}
+                              </span>
+                            )}
+                            {client.contact_email && (
+                              <span className="flex items-center gap-1">
+                                <Mail className="h-3 w-3" />
+                                {client.contact_email}
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </TableCell>
                       <TableCell>
                         <Badge variant={client.is_active ? "default" : "secondary"}>
@@ -306,6 +441,10 @@ export default function BpoClients() {
                             <DropdownMenuItem onClick={() => openEditDialog(client)}>
                               <Pencil className="h-4 w-4 mr-2" />
                               Editar
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openTimeline(client)}>
+                              <Clock className="h-4 w-4 mr-2" />
+                              Ver timeline
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() => handleDelete(client)}
@@ -429,6 +568,63 @@ export default function BpoClients() {
               )}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isTimelineOpen} onOpenChange={setIsTimelineOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Timeline do Cliente</DialogTitle>
+            <DialogDescription>
+              {timelineClient?.name || "Cliente selecionado"}
+            </DialogDescription>
+          </DialogHeader>
+
+          {timelineLoading ? (
+            <div className="space-y-3 py-4">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-16" />
+              ))}
+            </div>
+          ) : timelineItems.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-border/60 py-10 text-center text-sm text-muted-foreground">
+              Nenhuma tarefa encontrada para este cliente.
+            </div>
+          ) : (
+            <div className="space-y-3 py-2">
+              {timelineItems.map((task) => (
+                <div
+                  key={task.id}
+                  className="flex items-start justify-between rounded-2xl border border-border/60 bg-muted/30 p-3"
+                >
+                  <div>
+                    <p className="text-sm font-semibold">{task.title}</p>
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                      {task.due_date && (
+                        <span className="flex items-center gap-1">
+                          <CalendarClock className="h-3 w-3" />
+                          {new Date(task.due_date).toLocaleDateString("pt-BR")}
+                        </span>
+                      )}
+                      {task.category && <span>{task.category}</span>}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs">
+                    {task.status === "concluido" ? (
+                      <span className="flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-1 text-emerald-700">
+                        <CheckCircle className="h-3 w-3" />
+                        Concluída
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-muted px-2 py-1 text-muted-foreground">
+                        {task.status}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

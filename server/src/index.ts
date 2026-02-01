@@ -1439,6 +1439,54 @@ app.get("/api/bpo/tasks", async (request, reply) => {
   return rows;
 });
 
+app.get("/api/bpo/clients/:id/timeline", async (request, reply) => {
+  const sessionData = await requireSession(request, reply);
+  if (!sessionData) return;
+
+  const { id } = request.params as { id?: string };
+  if (!id) {
+    reply.status(400).send({ message: "ID do cliente obrigatório." });
+    return;
+  }
+
+  const workspace = await ensureWorkspace(sessionData.user);
+  if (!workspace) {
+    reply.status(500).send({ message: "WORKSPACE_CREATE_FAILED" });
+    return;
+  }
+
+  const client = (await sql`
+    select id
+    from bpo_clients
+    where id = ${id}
+      and workspace_id = ${workspace.id}
+    limit 1
+  `)[0];
+
+  if (!client?.id) {
+    reply.status(404).send({ message: "Cliente não encontrado." });
+    return;
+  }
+
+  const tasks = await sql`
+    select id,
+           title,
+           description,
+           status,
+           priority,
+           category,
+           due_date,
+           completed_at,
+           created_at
+    from bpo_tasks
+    where workspace_id = ${workspace.id}
+      and client_id = ${id}
+    order by due_date asc nulls last, created_at desc
+  `;
+
+  return tasks;
+});
+
 app.post("/api/bpo/tasks", async (request, reply) => {
   const sessionData = await requireSession(request, reply);
   if (!sessionData) return;
@@ -1697,6 +1745,61 @@ app.get("/api/bpo/summary", async (request, reply) => {
     completedTasks,
     overdueTasks,
     tasksCompletedThisMonth,
+  };
+});
+
+app.get("/api/bpo/insights", async (request, reply) => {
+  const sessionData = await requireSession(request, reply);
+  if (!sessionData) return;
+
+  const workspace = await ensureWorkspace(sessionData.user);
+  if (!workspace) {
+    reply.status(500).send({ message: "WORKSPACE_CREATE_FAILED" });
+    return;
+  }
+
+  const statusRows = (await sql`
+    select status, count(*)::int as count
+    from bpo_tasks
+    where workspace_id = ${workspace.id}
+    group by status
+  `) as Array<{ status: string; count: number }>;
+
+  const categoryRows = (await sql`
+    select category, count(*)::int as count
+    from bpo_tasks
+    where workspace_id = ${workspace.id}
+    group by category
+    order by count desc
+  `) as Array<{ category: string; count: number }>;
+
+  const monthlyRows = (await sql`
+    select date_trunc('month', completed_at) as month, count(*)::int as count
+    from bpo_tasks
+    where workspace_id = ${workspace.id}
+      and status = 'concluido'
+      and completed_at is not null
+      and completed_at >= now() - interval '6 months'
+    group by month
+    order by month asc
+  `) as Array<{ month: string; count: number }>;
+
+  const overdueByPriority = (await sql`
+    select priority, count(*)::int as count
+    from bpo_tasks
+    where workspace_id = ${workspace.id}
+      and status <> 'concluido'
+      and due_date is not null
+      and due_date < now()
+    group by priority
+    order by count desc
+  `) as Array<{ priority: string; count: number }>;
+
+  return {
+    byStatus: statusRows,
+    byCategory: categoryRows,
+    monthlyCompleted: monthlyRows,
+    overdueByPriority,
   };
 });
 

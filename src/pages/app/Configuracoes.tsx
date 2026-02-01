@@ -87,6 +87,7 @@ export default function Configuracoes() {
   const [workspaceName, setWorkspaceName] = useState(workspace?.name || "");
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [logoFailed, setLogoFailed] = useState(false);
   const [enabledModules, setEnabledModules] = useState<Record<ModuleKey, boolean>>(
     normalizeEnabledModules(settings?.enabled_modules as Record<ModuleKey, boolean> | undefined)
   );
@@ -104,6 +105,9 @@ export default function Configuracoes() {
   useEffect(() => {
     if (workspace?.logo_path && !logoPreview) {
       setLogoPreview(buildApiUrl(`/api/storage/workspace-logos/${workspace.logo_path}`));
+    }
+    if (workspace?.logo_path) {
+      setLogoFailed(false);
     }
   }, [workspace?.logo_path, logoPreview]);
 
@@ -142,6 +146,7 @@ export default function Configuracoes() {
       const reader = new FileReader();
       reader.onloadend = () => {
         setLogoPreview(reader.result as string);
+        setLogoFailed(false);
       };
       reader.readAsDataURL(file);
     }
@@ -291,11 +296,17 @@ export default function Configuracoes() {
                 <div className="space-y-2">
                   <Label>Logo</Label>
                   <div className="flex items-center gap-4">
-                    {logoPreview || workspace?.logo_path ? (
+                    {(logoPreview || workspace?.logo_path) && !logoFailed ? (
                       <img
-                        src={logoPreview || buildApiUrl(`/api/storage/workspace-logos/${workspace?.logo_path}`)}
+                        src={
+                          logoPreview ||
+                          buildApiUrl(
+                            `/api/storage/workspace-logos/${workspace?.logo_path}?v=${workspace?.updated_at ?? ""}`
+                          )
+                        }
                         alt="Logo"
                         className="w-16 h-16 object-contain rounded-lg bg-slate-100"
+                        onError={() => setLogoFailed(true)}
                       />
                     ) : (
                       <div className="w-16 h-16 rounded-lg bg-slate-100 flex items-center justify-center">
