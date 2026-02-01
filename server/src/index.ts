@@ -342,9 +342,10 @@ const ensureWorkspaceMember = async (
   role: string,
   permissions: JsonValue = {}
 ) => {
+  const permissionsJson = JSON.stringify(permissions ?? {});
   await sql`
     insert into workspace_members (workspace_id, user_id, role, permissions, is_active)
-    values (${workspaceId}, ${userId}, ${role}, ${sql.json(asJsonValue(permissions))}, ${true})
+    values (${String(workspaceId)}, ${String(userId)}, ${String(role)}, ${permissionsJson}::jsonb, ${true})
     on conflict (workspace_id, user_id) do update
       set role = excluded.role,
           permissions = excluded.permissions,
