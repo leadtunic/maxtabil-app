@@ -111,13 +111,13 @@ export default function BillingCompleted() {
             </div>
             <h2 className="text-2xl font-bold mb-2">Pagamento Confirmado</h2>
             <p className="text-white/70 mb-6">
-              Seu acesso vitalício ao Maxtabil está ativo. A experiência completa já está liberada.
+              Sua assinatura do Maxtabil está ativa e seu acesso completo já foi liberado.
             </p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6 text-left text-sm text-white/70">
               {[
                 "Onboarding premium liberado",
                 "Ambiente seguro e dedicado",
-                "Acesso vitalício sem renovação",
+                "Acesso contínuo com renovação automática",
               ].map((item) => (
                 <div key={item} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
                   {item}
@@ -153,7 +153,7 @@ export default function BillingCompleted() {
               Estamos finalizando a confirmação do pagamento. Assim que aprovado, seu acesso é liberado automaticamente.
             </p>
             <div className="rounded-lg border border-white/10 bg-white/5 px-4 py-3 text-left text-sm text-white/70 mb-6">
-              O Pix pode levar alguns minutos para atualizar. Você receberá uma confirmação assim que concluir.
+              A confirmação da assinatura pode levar alguns minutos para atualizar. Você receberá uma confirmação assim que concluir.
             </div>
             <div className="flex flex-col gap-3">
               <Button

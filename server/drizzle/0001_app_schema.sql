@@ -32,6 +32,8 @@ CREATE TABLE IF NOT EXISTS public.entitlements (
   lifetime_paid_at timestamptz,
   abacate_billing_id text,
   abacate_status text,
+  mercadopago_preapproval_id text,
+  mercadopago_status text,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );

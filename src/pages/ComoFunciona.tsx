@@ -132,7 +132,7 @@ const WORKFLOW_STEPS = [
   },
   {
     step: 4,
-    title: "Pagamento Único via PIX",
+    title: "Assinatura Recorrente no Cartão",
     description: "Pague R$ 997,00 uma única vez e tenha acesso vitalício.",
     icon: Target,
   },
@@ -389,7 +389,7 @@ export default function ComoFunciona() {
             Pronto para começar?
           </h2>
           <p className="text-zinc-400 mb-8">
-            Pagamento único de R$ 997,00 via PIX. Acesso vitalício a todos os módulos e atualizações futuras.
+            Assinatura de R$ 997,00 via cartão de crédito com renovação automática no Mercado Pago.
           </p>
           <div className="flex flex-wrap justify-center gap-4">
             <Link to="/login?tab=signup">

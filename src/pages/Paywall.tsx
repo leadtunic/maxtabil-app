@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { apiRequest } from "@/lib/api";
 import { track, AnalyticsEvents } from "@/lib/analytics";
@@ -9,11 +10,11 @@ import { Loader2, CreditCard, Check, Shield, Zap, Clock } from "lucide-react";
 import { AnimatedCard } from "@/components/ui/animated-card";
 import ProceduralGroundBackground from "@/components/ui/animated-pattern-cloud";
 
-const LIFETIME_PRICE = 997;
-const LIFETIME_PRICE_FORMATTED = "R$ 997,00";
+const PLAN_PRICE = 997;
+const PLAN_PRICE_FORMATTED = "R$ 997,00";
 
 const FEATURES = [
-  "Acesso vitalício ao painel",
+  "Acesso completo ao painel",
   "Todos os módulos inclusos",
   "Atualizações futuras",
   "Suporte por e-mail",
@@ -22,10 +23,16 @@ const FEATURES = [
 ];
 
 export default function Paywall() {
+  const navigate = useNavigate();
   const { workspace, hasLifetimeAccess } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
-  const [cellphone, setCellphone] = useState("");
-  const [taxId, setTaxId] = useState("");
+  const [cardholderName, setCardholderName] = useState("");
+  const [cardNumber, setCardNumber] = useState("");
+  const [expirationMonth, setExpirationMonth] = useState("");
+  const [expirationYear, setExpirationYear] = useState("");
+  const [securityCode, setSecurityCode] = useState("");
+  const [identificationNumber, setIdentificationNumber] = useState("");
+  const [identificationType, setIdentificationType] = useState<"CPF" | "CNPJ">("CPF");
 
   const handleCheckout = async () => {
     if (!workspace) {
@@ -33,38 +40,57 @@ export default function Paywall() {
       return;
     }
 
-    const normalizedPhone = cellphone.replace(/\D/g, "");
-    if (!normalizedPhone) {
-      toast.error("Informe um telefone para continuar");
+    const normalizedCardNumber = cardNumber.replace(/\D/g, "");
+    const normalizedSecurityCode = securityCode.replace(/\D/g, "");
+    const normalizedIdentificationNumber = identificationNumber.replace(/\D/g, "");
+
+    if (!cardholderName.trim()) {
+      toast.error("Informe o nome do titular.");
       return;
     }
-    const normalizedTaxId = taxId.replace(/\D/g, "");
-    if (!normalizedTaxId) {
-      toast.error("Informe um CPF/CNPJ para continuar");
+    if (normalizedCardNumber.length < 13) {
+      toast.error("Número de cartão inválido.");
+      return;
+    }
+    if (!expirationMonth.trim() || !expirationYear.trim()) {
+      toast.error("Informe mês e ano de validade.");
+      return;
+    }
+    if (normalizedSecurityCode.length < 3) {
+      toast.error("Código de segurança inválido.");
+      return;
+    }
+    if (!normalizedIdentificationNumber) {
+      toast.error("Informe CPF/CNPJ do titular.");
       return;
     }
 
     setIsLoading(true);
-    track(AnalyticsEvents.CHECKOUT_STARTED, { price: LIFETIME_PRICE });
+    track(AnalyticsEvents.CHECKOUT_STARTED, { price: PLAN_PRICE, gateway: "mercadopago" });
 
     try {
-      const responsePayload = await apiRequest<{ paymentUrl?: string }>(
-        "/api/billing/lifetime",
-        {
-          method: "POST",
-          body: { cellphone: normalizedPhone, taxId: normalizedTaxId },
-        }
-      );
-      const paymentUrl = responsePayload?.paymentUrl;
+      const responsePayload = await apiRequest<{ initPoint?: string }>("/api/billing/lifetime", {
+        method: "POST",
+        body: {
+          cardholderName: cardholderName.trim(),
+          cardNumber: normalizedCardNumber,
+          expirationMonth: expirationMonth.trim(),
+          expirationYear: expirationYear.trim(),
+          securityCode: normalizedSecurityCode,
+          identificationType,
+          identificationNumber: normalizedIdentificationNumber,
+        },
+      });
 
-      if (!paymentUrl) {
-        throw new Error("URL de pagamento não recebida");
+      if (responsePayload?.initPoint) {
+        window.location.href = responsePayload.initPoint;
+        return;
       }
 
-      window.location.href = paymentUrl;
+      navigate("/billing/completed");
     } catch (error) {
       console.error("Checkout error:", error);
-      const message = error instanceof Error ? error.message : "Erro ao iniciar pagamento.";
+      const message = error instanceof Error ? error.message : "Erro ao iniciar assinatura.";
       toast.error(message);
     } finally {
       setIsLoading(false);
@@ -72,7 +98,6 @@ export default function Paywall() {
   };
 
   if (hasLifetimeAccess) {
-    // Already paid - redirect handled by AppShell
     return (
       <div className="min-h-screen flex items-center justify-center relative">
         <ProceduralGroundBackground />
@@ -81,8 +106,8 @@ export default function Paywall() {
             <Check className="w-8 h-8 text-green-400" />
           </div>
           <h2 className="text-xl font-semibold text-white mb-2">Acesso Liberado!</h2>
-          <p className="text-white/60">Você já possui acesso vitalício.</p>
-          <Button className="mt-6 bg-blue-600 hover:bg-blue-700" onClick={() => window.location.href = "/app"}>
+          <p className="text-white/60">Seu acesso já está ativo.</p>
+          <Button className="mt-6 bg-blue-600 hover:bg-blue-700" onClick={() => (window.location.href = "/app")}>
             Ir para o Painel
           </Button>
         </AnimatedCard>
@@ -95,27 +120,22 @@ export default function Paywall() {
       <ProceduralGroundBackground />
       <div className="w-full max-w-4xl relative z-10">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">Libere seu Acesso</h1>
-          <p className="text-white/60">
-            Pagamento único via PIX. Acesso vitalício garantido.
-          </p>
+          <h1 className="text-3xl font-bold text-white mb-2">Assine o Maxtabil</h1>
+          <p className="text-white/60">Cobrança recorrente no cartão de crédito via Mercado Pago.</p>
         </div>
 
         <div className="grid md:grid-cols-2 gap-6">
-          {/* Pricing Card */}
           <AnimatedCard className="p-6">
             <div className="mb-6">
               <div className="flex items-center gap-2 text-blue-400 mb-2">
                 <CreditCard className="w-5 h-5" />
-                <span className="text-sm font-medium">PAGAMENTO ÚNICO</span>
+                <span className="text-sm font-medium">ASSINATURA RECORRENTE</span>
               </div>
-              <h2 className="text-4xl font-bold text-white">{LIFETIME_PRICE_FORMATTED}</h2>
-              <p className="text-white/60 mt-1">
-                Acesso vitalício - pague uma vez, use para sempre
-              </p>
+              <h2 className="text-4xl font-bold text-white">{PLAN_PRICE_FORMATTED}</h2>
+              <p className="text-white/60 mt-1">Valor por período de assinatura.</p>
             </div>
-            
-            <div className="space-y-6">
+
+            <div className="space-y-4">
               <ul className="space-y-3">
                 {FEATURES.map((feature) => (
                   <li key={feature} className="flex items-center gap-3">
@@ -124,6 +144,71 @@ export default function Paywall() {
                   </li>
                 ))}
               </ul>
+
+              <Input
+                value={cardholderName}
+                onChange={(event) => setCardholderName(event.target.value)}
+                placeholder="Nome do titular"
+                className="h-12"
+              />
+
+              <Input
+                value={cardNumber}
+                onChange={(event) => setCardNumber(event.target.value)}
+                placeholder="Número do cartão"
+                inputMode="numeric"
+                className="h-12"
+              />
+
+              <div className="grid grid-cols-3 gap-3">
+                <Input
+                  value={expirationMonth}
+                  onChange={(event) => setExpirationMonth(event.target.value)}
+                  placeholder="MM"
+                  inputMode="numeric"
+                  className="h-12"
+                />
+                <Input
+                  value={expirationYear}
+                  onChange={(event) => setExpirationYear(event.target.value)}
+                  placeholder="AAAA"
+                  inputMode="numeric"
+                  className="h-12"
+                />
+                <Input
+                  value={securityCode}
+                  onChange={(event) => setSecurityCode(event.target.value)}
+                  placeholder="CVV"
+                  inputMode="numeric"
+                  className="h-12"
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <Button
+                  type="button"
+                  variant={identificationType === "CPF" ? "default" : "outline"}
+                  onClick={() => setIdentificationType("CPF")}
+                  className="h-12"
+                >
+                  CPF
+                </Button>
+                <Button
+                  type="button"
+                  variant={identificationType === "CNPJ" ? "default" : "outline"}
+                  onClick={() => setIdentificationType("CNPJ")}
+                  className="h-12"
+                >
+                  CNPJ
+                </Button>
+                <Input
+                  value={identificationNumber}
+                  onChange={(event) => setIdentificationNumber(event.target.value)}
+                  placeholder={`${identificationType} do titular`}
+                  inputMode="numeric"
+                  className="h-12 col-span-1"
+                />
+              </div>
 
               <Button
                 onClick={handleCheckout}
@@ -134,42 +219,25 @@ export default function Paywall() {
                 {isLoading ? (
                   <>
                     <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                    Gerando PIX...
+                    Criando assinatura...
                   </>
                 ) : (
                   <>
                     <CreditCard className="w-5 h-5 mr-2" />
-                    Pagar com PIX
+                    Assinar com Cartão
                   </>
                 )}
               </Button>
 
-              <Input
-                value={cellphone}
-                onChange={(event) => setCellphone(event.target.value)}
-                placeholder="Telefone (DDD + número)"
-                inputMode="tel"
-                className="h-12"
-              />
-
-              <Input
-                value={taxId}
-                onChange={(event) => setTaxId(event.target.value)}
-                placeholder="CPF ou CNPJ"
-                inputMode="numeric"
-                className="h-12"
-              />
-
               <p className="text-xs text-center text-white/40">
-                Pagamento processado por AbacatePay. Ambiente seguro.
+                Pagamento processado por Mercado Pago. Ambiente seguro.
               </p>
             </div>
           </AnimatedCard>
 
-          {/* Benefits Card */}
           <AnimatedCard className="p-6">
             <h2 className="text-xl font-semibold text-white mb-6">Por que escolher nosso painel?</h2>
-            
+
             <div className="space-y-6">
               <div className="flex gap-4">
                 <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center shrink-0">
@@ -200,9 +268,9 @@ export default function Paywall() {
                   <Clock className="w-5 h-5 text-blue-400" />
                 </div>
                 <div>
-                  <h3 className="font-medium text-white mb-1">Sem Mensalidade</h3>
+                  <h3 className="font-medium text-white mb-1">Recorrência automática</h3>
                   <p className="text-sm text-white/60">
-                    Pagamento único. Sem surpresas, sem cobranças recorrentes.
+                    Cobrança recorrente no cartão para manter seu acesso sempre ativo.
                   </p>
                 </div>
               </div>

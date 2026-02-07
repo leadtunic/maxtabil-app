@@ -86,6 +86,8 @@ export interface Database {
           lifetime_paid_at: string | null;
           abacate_billing_id: string | null;
           abacate_status: string | null;
+          mercadopago_preapproval_id: string | null;
+          mercadopago_status: string | null;
           updated_at: string;
         };
         Insert: {
@@ -94,6 +96,8 @@ export interface Database {
           lifetime_paid_at?: string | null;
           abacate_billing_id?: string | null;
           abacate_status?: string | null;
+          mercadopago_preapproval_id?: string | null;
+          mercadopago_status?: string | null;
           updated_at?: string;
         };
         Update: {
@@ -102,6 +106,8 @@ export interface Database {
           lifetime_paid_at?: string | null;
           abacate_billing_id?: string | null;
           abacate_status?: string | null;
+          mercadopago_preapproval_id?: string | null;
+          mercadopago_status?: string | null;
           updated_at?: string;
         };
       };

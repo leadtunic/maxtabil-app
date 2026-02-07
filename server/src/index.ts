@@ -37,19 +37,48 @@ type JsonValue = string | number | boolean | null | { [key: string]: JsonValue }
 
 const asJsonValue = (value: unknown): JsonValue => value as JsonValue;
 
-const ABACATEPAY_PUBLIC_KEY =
-  "t9dXRhHHo3yDEj5pVDYz0frf7q6bMKyMRmxxCPIPp3RCplBfXRxqlC6ZpiWmOqj4L63qEaeUOtrCI8P0VMUgo6iIga2ri9ogaHFs0WIIywSMg0q7RmBfybe1E5XJcfC4IW3alNqym0tXoAKkzvfEjZxV6bE0oG2zJrNNYmUCKZyV0KZ3JS8Votf9EAWWYdiDkMkpbMdPggfh1EqHlVkMiTady6jOR3hyzGEHrIz2Ret0xHKMbiqkr9HS1JhNHDX9";
+const toTimingSafeHexEqual = (a: string, b: string) => {
+  const left = Buffer.from(a, "utf8");
+  const right = Buffer.from(b, "utf8");
+  return left.length === right.length && crypto.timingSafeEqual(left, right);
+};
 
-const verifyAbacateSignature = (rawBody: string, signatureFromHeader: string) => {
-  const bodyBuffer = Buffer.from(rawBody, "utf8");
-  const expectedSig = crypto
-    .createHmac("sha256", ABACATEPAY_PUBLIC_KEY)
-    .update(bodyBuffer)
-    .digest("base64");
+const parseMercadoPagoSignature = (headerValue: string) => {
+  const parts = headerValue
+    .split(",")
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  const entries = new Map<string, string>();
+  for (const part of parts) {
+    const index = part.indexOf("=");
+    if (index <= 0) continue;
+    const key = part.slice(0, index).trim();
+    const value = part.slice(index + 1).trim();
+    entries.set(key, value);
+  }
+  return {
+    ts: entries.get("ts") ?? "",
+    v1: entries.get("v1") ?? "",
+  };
+};
 
-  const a = Buffer.from(expectedSig);
-  const b = Buffer.from(signatureFromHeader);
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
+const verifyMercadoPagoSignature = ({
+  dataId,
+  requestId,
+  signatureHeader,
+  secret,
+}: {
+  dataId: string;
+  requestId: string;
+  signatureHeader: string;
+  secret: string;
+}) => {
+  const { ts, v1 } = parseMercadoPagoSignature(signatureHeader);
+  if (!ts || !v1 || !dataId || !requestId || !secret) return false;
+
+  const manifest = `id:${dataId};request-id:${requestId};ts:${ts};`;
+  const expected = crypto.createHmac("sha256", secret).update(manifest).digest("hex");
+  return toTimingSafeHexEqual(expected, v1);
 };
 
 const readMultipartFieldValue = (field: unknown): string | undefined => {
@@ -502,6 +531,34 @@ const ensureEntitlement = async (workspaceId: string) => {
   }
 
   return entitlement ?? null;
+};
+
+const mercadoPagoRequest = async <TResponse>(
+  path: string,
+  payload?: unknown,
+  method: "GET" | "POST" = "GET"
+) => {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${env.mercadoPagoAccessToken}`,
+    "Content-Type": "application/json",
+  };
+
+  if (method !== "GET") {
+    headers["X-Idempotency-Key"] = crypto.randomUUID();
+  }
+
+  const response = await fetch(`https://api.mercadopago.com${path}`, {
+    method,
+    headers,
+    body: payload === undefined ? undefined : JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => "");
+    throw new Error(errorText || "MERCADO_PAGO_REQUEST_FAILED");
+  }
+
+  return (await response.json()) as TResponse;
 };
 
 const getWorkspaceBundle = async (user: AuthUser) => {
@@ -2453,10 +2510,20 @@ app.post("/api/billing/lifetime", async (request, reply) => {
   const sessionData = await requireSession(request, reply);
   if (!sessionData) return;
 
-  const body = request.body as { cellphone?: string; taxId?: string } | undefined;
+  const body = request.body as
+    | {
+        cardholderName?: string;
+        cardNumber?: string;
+        expirationMonth?: string;
+        expirationYear?: string;
+        securityCode?: string;
+        identificationType?: string;
+        identificationNumber?: string;
+      }
+    | undefined;
 
-  if (!env.abacatePayApiKey) {
-    reply.status(500).send({ message: "ABACATEPAY_API_KEY não configurado." });
+  if (!env.mercadoPagoAccessToken) {
+    reply.status(500).send({ message: "MERCADOPAGO_ACCESS_TOKEN não configurado." });
     return;
   }
 
@@ -2465,15 +2532,28 @@ app.post("/api/billing/lifetime", async (request, reply) => {
     return;
   }
 
-  const customerCellphone = body?.cellphone?.trim() || env.abacatePayCustomerPhone;
-  if (!customerCellphone) {
-    reply.status(500).send({ message: "ABACATEPAY_CUSTOMER_PHONE não configurado." });
+  const cardholderName = (body?.cardholderName ?? "").trim();
+  const cardNumber = (body?.cardNumber ?? "").replace(/\D/g, "");
+  const expirationMonth = (body?.expirationMonth ?? "").replace(/\D/g, "");
+  const expirationYear = (body?.expirationYear ?? "").replace(/\D/g, "");
+  const securityCode = (body?.securityCode ?? "").replace(/\D/g, "");
+  const identificationType = (body?.identificationType ?? "CPF").trim().toUpperCase();
+  const identificationNumber = (body?.identificationNumber ?? "").replace(/\D/g, "");
+
+  if (
+    !cardholderName ||
+    cardNumber.length < 13 ||
+    expirationMonth.length < 1 ||
+    expirationYear.length < 2 ||
+    securityCode.length < 3 ||
+    !identificationNumber
+  ) {
+    reply.status(400).send({ message: "Dados do cartão inválidos." });
     return;
   }
 
-  const customerTaxId = body?.taxId?.trim() || env.abacatePayCustomerTaxId;
-  if (!customerTaxId) {
-    reply.status(500).send({ message: "ABACATEPAY_CUSTOMER_TAX_ID não configurado." });
+  if (!sessionData.user.email) {
+    reply.status(400).send({ message: "Usuário sem e-mail para assinatura." });
     return;
   }
 
@@ -2486,7 +2566,7 @@ app.post("/api/billing/lifetime", async (request, reply) => {
   const rawWorkspaceId = String(workspace.id);
   const entitlement = await ensureEntitlement(rawWorkspaceId);
   if (entitlement?.lifetime_access) {
-    reply.status(400).send({ message: "Acesso vitalício já está ativo." });
+    reply.status(400).send({ message: "Assinatura já está ativa para este workspace." });
     return;
   }
 
@@ -2499,85 +2579,99 @@ app.post("/api/billing/lifetime", async (request, reply) => {
   const workspaceId = toDbValue(rawWorkspaceId);
   const userId = toDbValue(sessionData.user.id);
   const userEmail = sessionData.user.email ? toDbValue(sessionData.user.email) : null;
-  const externalId = `${workspaceId ?? "unknown"}:${userId ?? "unknown"}:${Date.now()}`;
-  const payload = {
-    frequency: "ONE_TIME",
-    methods: ["PIX"],
-    products: [
-      {
-        externalId: "lifetime",
-        name: "Acesso Vitalício - Painel de Gestão",
-        description: "Acesso vitalício ao painel de gestão com todos os módulos",
-        quantity: 1,
-        price: 99700,
+  const externalReference = `${workspaceId ?? "unknown"}:${userId ?? "unknown"}`;
+
+  const normalizedYear =
+    expirationYear.length === 2 ? `20${expirationYear}` : expirationYear.slice(0, 4);
+
+  type MercadoPagoCardTokenResponse = { id: string };
+  const cardToken = await mercadoPagoRequest<MercadoPagoCardTokenResponse>(
+    "/v1/card_tokens",
+    {
+      card_number: cardNumber,
+      expiration_month: expirationMonth,
+      expiration_year: normalizedYear,
+      security_code: securityCode,
+      cardholder: {
+        name: cardholderName,
+        identification: {
+          type: identificationType,
+          number: identificationNumber,
+        },
       },
-    ],
-    returnUrl: `${env.appBaseUrl}/paywall`,
-    completionUrl: `${env.appBaseUrl}/billing/completed`,
-    customer: {
-      name: sessionData.user.name || sessionData.user.email?.split("@")[0] || "Cliente",
-      email: sessionData.user.email,
-      cellphone: customerCellphone,
-      taxId: customerTaxId,
     },
-    externalId,
-    metadata: {
-      workspace_id: rawWorkspaceId,
-      user_id: String(sessionData.user.id),
-    },
+    "POST"
+  );
+
+  type MercadoPagoPreapprovalResponse = {
+    id?: string;
+    status?: string;
+    init_point?: string;
   };
 
-  const abacateResponse = await fetch("https://api.abacatepay.com/v1/billing/create", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${env.abacatePayApiKey}`,
-      "Content-Type": "application/json",
+  const preapproval = await mercadoPagoRequest<MercadoPagoPreapprovalResponse>(
+    "/preapproval",
+    {
+      reason: env.mercadoPagoPlanReason,
+      external_reference: externalReference,
+      payer_email: sessionData.user.email,
+      card_token_id: cardToken.id,
+      status: "authorized",
+      back_url: `${env.appBaseUrl}/billing/completed`,
+      notification_url: `${env.appBaseUrl}/api/webhooks/mercadopago`,
+      auto_recurring: {
+        frequency: env.mercadoPagoRecurringFrequency,
+        frequency_type: env.mercadoPagoRecurringFrequencyType,
+        transaction_amount: env.mercadoPagoRecurringAmount,
+        currency_id: env.mercadoPagoRecurringCurrency,
+      },
     },
-    body: JSON.stringify(payload),
-  });
+    "POST"
+  );
 
-  if (!abacateResponse.ok) {
-    const errorText = await abacateResponse.text().catch(() => "");
-    request.log.error({ errorText }, "AbacatePay error");
-    reply.status(500).send({ message: "Falha ao criar cobrança." });
-    return;
-  }
-
-  const billingResult = (await abacateResponse.json().catch(() => null)) as
-    | {
-        id?: string;
-        url?: string;
-        data?: {
-          id?: string;
-          url?: string;
-          paymentUrl?: string;
-        };
-      }
-    | null;
-  const billingIdRaw = billingResult?.data?.id || billingResult?.id || null;
-  const paymentUrlRaw =
-    billingResult?.data?.url || billingResult?.url || billingResult?.data?.paymentUrl;
-  const billingId = toDbValue(billingIdRaw);
-  const paymentUrl =
-    typeof paymentUrlRaw === "string" || typeof paymentUrlRaw === "number"
-      ? String(paymentUrlRaw)
-      : undefined;
+  const preapprovalIdRaw = preapproval?.id ?? null;
+  const preapprovalStatus = preapproval?.status ?? "pending";
+  const preapprovalId = toDbValue(preapprovalIdRaw);
 
   const entitlementUpdatedAt = new Date().toISOString();
   const workspaceIdText = workspaceId == null ? null : String(workspaceId);
-  const billingIdText = billingId == null ? null : String(billingId);
-  const statusText = "PENDING";
+  const preapprovalIdText = preapprovalId == null ? null : String(preapprovalId);
+  const statusText = String(preapprovalStatus);
+  const hasActiveAccess = statusText === "authorized";
+
   try {
     await sql`
-      insert into entitlements (workspace_id, lifetime_access, abacate_billing_id, abacate_status, updated_at)
-      values (${workspaceIdText}, false, ${billingIdText}, ${statusText}, ${entitlementUpdatedAt})
+      insert into entitlements (
+        workspace_id,
+        lifetime_access,
+        lifetime_paid_at,
+        mercadopago_preapproval_id,
+        mercadopago_status,
+        updated_at
+      )
+      values (
+        ${workspaceIdText},
+        ${hasActiveAccess},
+        ${hasActiveAccess ? entitlementUpdatedAt : null},
+        ${preapprovalIdText},
+        ${statusText},
+        ${entitlementUpdatedAt}
+      )
       on conflict (workspace_id) do update set
-        abacate_billing_id = excluded.abacate_billing_id,
-        abacate_status = excluded.abacate_status,
+        lifetime_access = excluded.lifetime_access,
+        lifetime_paid_at = excluded.lifetime_paid_at,
+        mercadopago_preapproval_id = excluded.mercadopago_preapproval_id,
+        mercadopago_status = excluded.mercadopago_status,
         updated_at = excluded.updated_at
     `;
 
-    const checkoutMetadata = JSON.stringify({ external_id: externalId, price_cents: 99700 });
+    const checkoutMetadata = JSON.stringify({
+      external_reference: externalReference,
+      transaction_amount: env.mercadoPagoRecurringAmount,
+      frequency: env.mercadoPagoRecurringFrequency,
+      frequency_type: env.mercadoPagoRecurringFrequencyType,
+      status: preapprovalStatus,
+    });
     await sql`
       insert into audit_logs (
         workspace_id,
@@ -2594,7 +2688,7 @@ app.post("/api/billing/lifetime", async (request, reply) => {
         ${userEmail},
         ${"CHECKOUT_STARTED"},
         ${"billing"},
-        ${billingId},
+        ${preapprovalId},
         ${checkoutMetadata}::jsonb
       )
     `;
@@ -2606,11 +2700,11 @@ app.post("/api/billing/lifetime", async (request, reply) => {
           workspaceIdType: typeof workspaceId,
           userIdType: typeof userId,
           userEmailType: typeof userEmail,
-          billingIdType: typeof billingId,
+          billingIdType: typeof preapprovalId,
           workspaceIdIsObject: typeof workspaceId === "object",
           userIdIsObject: typeof userId === "object",
           userEmailIsObject: typeof userEmail === "object",
-          billingIdIsObject: typeof billingId === "object",
+          billingIdIsObject: typeof preapprovalId === "object",
         },
       },
       "Checkout persistence failed"
@@ -2619,87 +2713,135 @@ app.post("/api/billing/lifetime", async (request, reply) => {
   }
 
   return {
-    billingId,
-    paymentUrl,
+    billingId: preapprovalId,
+    status: preapprovalStatus,
+    initPoint: preapproval?.init_point,
   };
 });
 
-app.post("/api/webhooks/abacatepay", async (request, reply) => {
-  const webhookSecret = (request.query as { webhookSecret?: string }).webhookSecret;
-  if (!env.abacatePayWebhookSecret || webhookSecret !== env.abacatePayWebhookSecret) {
-    reply.status(401).send({ error: "Invalid webhook secret" });
+app.post("/api/webhooks/mercadopago", async (request, reply) => {
+  if (!env.mercadoPagoWebhookSecret) {
+    reply.status(500).send({ error: "MERCADOPAGO_WEBHOOK_SECRET não configurado." });
     return;
   }
 
-  const signature = request.headers["x-webhook-signature"];
-  if (typeof signature !== "string") {
-    reply.status(401).send({ error: "Missing webhook signature" });
+  if (!env.mercadoPagoAccessToken) {
+    reply.status(500).send({ error: "MERCADOPAGO_ACCESS_TOKEN não configurado." });
     return;
   }
 
-  const rawBody = (request as FastifyRequest & { rawBody?: string }).rawBody ?? "";
-  if (!rawBody || !verifyAbacateSignature(rawBody, signature)) {
+  const signatureHeader = request.headers["x-signature"];
+  const requestIdHeader = request.headers["x-request-id"];
+  if (typeof signatureHeader !== "string" || typeof requestIdHeader !== "string") {
+    reply.status(401).send({ error: "Missing webhook signature headers" });
+    return;
+  }
+
+  const query = request.query as Record<string, string | undefined>;
+  const notificationDataId = query["data.id"] || query.id || "";
+  if (!notificationDataId) {
+    reply.status(400).send({ error: "Missing data.id" });
+    return;
+  }
+
+  const isValid = verifyMercadoPagoSignature({
+    dataId: notificationDataId,
+    requestId: requestIdHeader,
+    signatureHeader,
+    secret: env.mercadoPagoWebhookSecret,
+  });
+  if (!isValid) {
     reply.status(401).send({ error: "Invalid webhook signature" });
     return;
   }
 
   const payload = request.body as {
-    id?: string;
-    event?: string;
-    devMode?: boolean;
-    data?: {
-      billing?: {
-        id?: string;
-        status?: string;
-        paidAmount?: number;
-      };
-      payment?: {
-        amount?: number;
-        method?: string;
-      };
+    id?: number | string;
+    type?: string;
+    action?: string;
+    data?: { id?: string | number };
+    topic?: string;
+  };
+
+  const eventType =
+    query.topic || query.type || payload?.type || payload?.topic || payload?.action || "";
+
+  if (!eventType.includes("preapproval")) {
+    return { received: true, ignored: true };
+  }
+
+  type MercadoPagoPreapprovalDetails = {
+    id: string;
+    external_reference?: string;
+    status?: string;
+    reason?: string;
+    auto_recurring?: {
+      transaction_amount?: number;
+      currency_id?: string;
+      frequency?: number;
+      frequency_type?: string;
     };
   };
 
-  if (payload?.event === "billing.paid") {
-    const billingId = payload.data?.billing?.id ?? null;
-    const status = payload.data?.billing?.status ?? "PAID";
-    const paidAmount = payload.data?.billing?.paidAmount ?? payload.data?.payment?.amount ?? null;
-    const updatedAt = new Date().toISOString();
+  const preapproval = await mercadoPagoRequest<MercadoPagoPreapprovalDetails>(
+    `/preapproval/${notificationDataId}`,
+    undefined,
+    "GET"
+  );
 
-    if (billingId) {
-      const updated = (await sql`
-        update entitlements
-        set lifetime_access = true,
-            abacate_status = ${status},
-            lifetime_paid_at = ${updatedAt},
-            updated_at = ${updatedAt}
-        where abacate_billing_id = ${billingId}
-        returning workspace_id
-      `)[0];
+  const status = (preapproval.status ?? "pending").toLowerCase();
+  const activeStatuses = new Set(["authorized"]);
+  const hasAccess = activeStatuses.has(status);
+  const now = new Date().toISOString();
 
-      if (updated?.workspace_id) {
-        await sql`
-          insert into audit_logs (
-            workspace_id,
-            actor_user_id,
-            actor_email,
-            action,
-            entity_type,
-            entity_id,
-            metadata
-          )
-          values (
-            ${updated.workspace_id},
-            ${null},
-            ${null},
-            ${"CHECKOUT_PAID"},
-            ${"billing"},
-            ${billingId},
-            ${sql.json(asJsonValue({ event_id: payload.id ?? null, amount_cents: paidAmount }))}
-          )
-        `;
-      }
-    }
+  const externalWorkspaceCandidate = (preapproval.external_reference ?? "").split(":")[0] || "";
+  const workspaceIdFromExternalRef = /^[0-9a-f-]{36}$/i.test(externalWorkspaceCandidate)
+    ? externalWorkspaceCandidate
+    : null;
+
+  const updated = (await sql`
+    update entitlements
+    set lifetime_access = ${hasAccess},
+        lifetime_paid_at = case
+          when ${hasAccess} then coalesce(lifetime_paid_at, ${now})
+          else lifetime_paid_at
+        end,
+        mercadopago_status = ${status},
+        updated_at = ${now}
+    where mercadopago_preapproval_id = ${preapproval.id}
+       or (${workspaceIdFromExternalRef} is not null and workspace_id = ${workspaceIdFromExternalRef})
+    returning workspace_id
+  `)[0];
+
+  if (updated?.workspace_id) {
+    await sql`
+      insert into audit_logs (
+        workspace_id,
+        actor_user_id,
+        actor_email,
+        action,
+        entity_type,
+        entity_id,
+        metadata
+      )
+      values (
+        ${updated.workspace_id},
+        ${null},
+        ${null},
+        ${"CHECKOUT_STATUS_UPDATED"},
+        ${"billing"},
+        ${preapproval.id},
+        ${sql.json(
+          asJsonValue({
+            status,
+            event_id: payload.id ?? null,
+            topic: eventType,
+            amount: preapproval.auto_recurring?.transaction_amount ?? null,
+            currency: preapproval.auto_recurring?.currency_id ?? null,
+          })
+        )}
+      )
+    `;
   }
 
   return { received: true };

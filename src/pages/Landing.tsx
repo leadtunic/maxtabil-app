@@ -47,7 +47,7 @@ const MODULES = [
 const STEPS = [
   { step: "1", title: "Crie sua conta", description: "Cadastre-se com e-mail ou Google em segundos" },
   { step: "2", title: "Configure seu escritório", description: "Escolha os módulos e personalize com sua logo" },
-  { step: "3", title: "Faça o pagamento único", description: "Pague via PIX e tenha acesso vitalício" },
+  { step: "3", title: "Faça sua assinatura", description: "Assine com cartão e mantenha acesso ativo" },
   { step: "4", title: "Comece a usar", description: "Acesse todos os recursos imediatamente" },
 ];
 
@@ -62,7 +62,7 @@ const FAQ_ITEMS = [
   },
   {
     question: "O pagamento é recorrente?",
-    answer: "Não! O pagamento é único via PIX. Uma vez pago, você tem acesso vitalício ao painel e todas as atualizações futuras.",
+    answer: "Sim. A cobrança é recorrente no cartão de crédito para manter o acesso ativo ao painel.",
   },
   {
     question: "Meus dados ficam isolados?",
@@ -173,7 +173,7 @@ export default function Landing() {
       <Section className="pt-32 md:pt-40 relative overflow-hidden">
         <div className="text-center max-w-4xl mx-auto animate-fade-in">
           <Badge className="mb-6 bg-blue-500/10 text-blue-400 border-blue-500/20 hover:bg-blue-500/15">
-            Pagamento único via PIX
+            Assinatura recorrente no cartão
           </Badge>
           <h1 className="text-4xl md:text-6xl font-bold text-zinc-100 mb-6 leading-tight tracking-tight">
             A operação do seu escritório, centralizada e padronizada.
@@ -221,7 +221,7 @@ export default function Landing() {
             </span>
             <span className="flex items-center gap-2">
               <CheckCircle className="h-4 w-4 text-blue-500" />
-              Acesso vitalício via PIX
+              Acesso contínuo via assinatura
             </span>
           </div>
         </div>
@@ -307,13 +307,13 @@ export default function Landing() {
           <Card className="border-2 border-blue-500/50 bg-zinc-900/80 backdrop-blur-sm shadow-2xl shadow-blue-500/10">
             <CardHeader className="text-center pb-2">
               <Badge className="w-fit mx-auto mb-4 bg-blue-500/10 text-blue-400 border-blue-500/20">
-                Pagamento único
+                Assinatura
               </Badge>
               <CardTitle className="text-4xl font-bold text-zinc-100 font-mono">
                 R$ {LIFETIME_PRICE.toLocaleString("pt-BR")},00
               </CardTitle>
               <CardDescription className="text-base text-zinc-400">
-                Acesso vitalício - pague uma vez, use para sempre
+                Assinatura recorrente com renovação automática
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -321,7 +321,7 @@ export default function Landing() {
               <ul className="space-y-3">
                 <li className="flex items-center gap-3 text-zinc-300">
                   <CheckCircle className="h-5 w-5 text-blue-500 shrink-0" />
-                  <span>Acesso vitalício ao painel</span>
+                  <span>Acesso completo enquanto a assinatura estiver ativa</span>
                 </li>
                 <li className="flex items-center gap-3 text-zinc-300">
                   <CheckCircle className="h-5 w-5 text-blue-500 shrink-0" />
@@ -351,7 +351,7 @@ export default function Landing() {
                 </Button>
               </Link>
               <p className="text-xs text-center text-zinc-500">
-                Pagamento seguro via PIX
+                Pagamento seguro via Mercado Pago
               </p>
             </CardContent>
           </Card>

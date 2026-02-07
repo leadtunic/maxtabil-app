@@ -31,8 +31,8 @@ login -> onboarding -> paywall -> app.
    - Cria workspace se nao existir.
    - Atualiza `workspace_settings` e opcionalmente upload de logo.
 3) Paywall
-   - Chama endpoint da API `billing_create_lifetime`.
-   - Redireciona para URL de pagamento (PIX).
+   - Chama endpoint da API `POST /api/billing/lifetime`.
+   - Cria assinatura recorrente no cartao via Mercado Pago.
 4) App
    - AppShell faz o gate:
      - se nao autenticado -> `/login`
@@ -64,8 +64,8 @@ login -> onboarding -> paywall -> app.
 - Armazenamento via S3/MinIO ou filesystem com URLs assinadas.
 
 ## API/Worker (substitui Edge Functions)
-- `billing_create_lifetime`: cria cobranca AbacatePay (PIX).
-- `abacatepay_webhook`: recebe atualizacoes de pagamento.
+- `POST /api/billing/lifetime`: cria token de cartao e assinatura (`preapproval`) no Mercado Pago.
+- `POST /api/webhooks/mercadopago`: recebe eventos de assinatura e atualiza `entitlements`.
 - Rotinas administrativas ficam no backend (sem Edge Functions).
 
 Variaveis usadas no backend (exemplos):
@@ -73,12 +73,13 @@ Variaveis usadas no backend (exemplos):
 - `BETTER_AUTH_SECRET` (ou equivalente do Better Auth)
 - `GOOGLE_OAUTH_CLIENT_ID`
 - `GOOGLE_OAUTH_CLIENT_SECRET`
-- `ABACATEPAY_API_KEY`
+- `MERCADOPAGO_ACCESS_TOKEN`
+- `MERCADOPAGO_WEBHOOK_SECRET`
 - `APP_BASE_URL`
 
-## Integracao de pagamento (AbacatePay)
-- O frontend chama o endpoint da API `billing_create_lifetime`.
-- A API cria a cobranca e retorna `paymentUrl`.
+## Integracao de pagamento (Mercado Pago)
+- O frontend chama o endpoint `POST /api/billing/lifetime`.
+- A API cria token de cartao e assinatura recorrente (`/preapproval`).
 - Webhook atualiza `entitlements` e `audit_logs`.
 
 ## Analytics
@@ -101,7 +102,8 @@ Backend (runtime):
 - `BETTER_AUTH_BASE_URL`
 - `GOOGLE_OAUTH_CLIENT_ID`
 - `GOOGLE_OAUTH_CLIENT_SECRET`
-- `ABACATEPAY_API_KEY`
+- `MERCADOPAGO_ACCESS_TOKEN`
+- `MERCADOPAGO_WEBHOOK_SECRET`
 - `APP_BASE_URL`
 
 Recomendado:
