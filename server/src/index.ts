@@ -350,7 +350,7 @@ const ensureWorkspaceMember = async (
       set role = excluded.role,
           permissions = excluded.permissions,
           is_active = true,
-          updated_at = ${new Date()}
+          updated_at = now()
   `;
 };
 
