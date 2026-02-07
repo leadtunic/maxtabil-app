@@ -30,10 +30,12 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useAuthorization } from "@/hooks/use-authorization";
 import type { RouteKey } from "@/lib/authorization";
+import { useAuth } from "@/contexts/AuthContext";
+import { buildApiUrl } from "@/lib/api";
 
 const mainNav = [
   { title: "Início", url: "/app", icon: Home },
@@ -108,6 +110,19 @@ export function AppSidebar() {
   const collapsed = state === "collapsed";
   const location = useLocation();
   const { canAccess } = useAuthorization();
+  const { workspace } = useAuth();
+  const [logoFailed, setLogoFailed] = useState(false);
+
+  const workspaceName = workspace?.name?.trim() || "ESCOFER";
+  const workspaceSubtitle = "Intranet";
+  const workspaceLogoUrl = useMemo(() => {
+    if (!workspace?.logo_path) return null;
+    return buildApiUrl(`/api/storage/workspace-logos/${workspace.logo_path}`);
+  }, [workspace?.logo_path]);
+
+  useEffect(() => {
+    setLogoFailed(false);
+  }, [workspaceLogoUrl]);
 
   const [openSections, setOpenSections] = useState<Record<string, boolean>>(() =>
     moduleSections.reduce((acc, section) => {
@@ -122,12 +137,17 @@ export function AppSidebar() {
         <SidebarHeader className="p-4 border-b border-sidebar-border">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-2xl bg-sidebar-accent/70 flex items-center justify-center">
-              <img src="/logo.svg" alt="ESCOFER" className="h-6 w-6 object-contain" />
+              <img
+                src={!logoFailed && workspaceLogoUrl ? workspaceLogoUrl : "/logo.svg"}
+                alt={workspaceName}
+                className="h-6 w-6 object-contain"
+                onError={() => setLogoFailed(true)}
+              />
             </div>
             {!collapsed && (
               <div className="leading-tight">
-                <p className="text-sm font-semibold text-sidebar-foreground">ESCOFER</p>
-                <p className="text-xs text-sidebar-foreground/70">Intranet</p>
+                <p className="text-sm font-semibold text-sidebar-foreground">{workspaceName}</p>
+                <p className="text-xs text-sidebar-foreground/70">{workspaceSubtitle}</p>
               </div>
             )}
           </div>
