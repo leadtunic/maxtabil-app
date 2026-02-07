@@ -1,14 +1,14 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/api";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ClipboardList, Search, Filter, User, Settings, FileText, Link2, KeyRound } from "lucide-react";
+import { ClipboardList, Search, Filter, User, Settings, FileText, Link2, KeyRound, Target } from "lucide-react";
 import { motion } from "framer-motion";
 import type { AuditLog } from "@/types";
 
@@ -29,6 +29,9 @@ const actionIcons: Record<string, React.ElementType> = {
   DIGITAL_CERT_DELETED: FileText,
   SIMULATION_RUN: FileText,
   LOGIN_SUCCESS: KeyRound,
+  GOAL_CREATED: Target,
+  GOAL_UPDATED: Target,
+  GOAL_DELETED: Target,
 };
 
 const actionLabels: Record<string, string> = {
@@ -48,6 +51,9 @@ const actionLabels: Record<string, string> = {
   DIGITAL_CERT_DELETED: "Certificado removido",
   SIMULATION_RUN: "Simulação executada",
   LOGIN_SUCCESS: "Login realizado",
+  GOAL_CREATED: "Meta criada",
+  GOAL_UPDATED: "Meta atualizada",
+  GOAL_DELETED: "Meta excluída",
 };
 
 const pageSize = 15;
@@ -58,12 +64,6 @@ export default function AdminAuditoria() {
   const [entityFilter, setEntityFilter] = useState<string>("ALL");
   const [page, setPage] = useState(1);
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
-  const retentionStart = useMemo(() => {
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - 30);
-    return cutoff.toISOString();
-  }, []);
-
   const { data, isLoading } = useQuery({
     queryKey: ["audit_logs", search, actionFilter, entityFilter, page],
     queryFn: async () => {
@@ -154,6 +154,7 @@ export default function AdminAuditoria() {
                   <SelectItem value="rulesets">RuleSets</SelectItem>
                   <SelectItem value="legal_docs">Legalização</SelectItem>
                   <SelectItem value="digital_certs">Certificados</SelectItem>
+                  <SelectItem value="sector_goals">Metas</SelectItem>
                 </SelectContent>
               </Select>
             </div>

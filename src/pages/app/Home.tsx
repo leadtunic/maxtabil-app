@@ -12,6 +12,7 @@ import {
   Link2,
   Settings,
   ClipboardList,
+  Target,
   ArrowRight,
   ImagePlus,
   Trash2,
@@ -103,6 +104,13 @@ const adminCards = [
     description: "Gerenciar links úteis",
     icon: Link2,
     href: "/app/admin/links",
+    routeKey: "admin" as const,
+  },
+  {
+    title: "Metas",
+    description: "Gerenciar metas por setor",
+    icon: Target,
+    href: "/app/admin/metas",
     routeKey: "admin" as const,
   },
   {

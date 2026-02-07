@@ -325,6 +325,18 @@ const workspaceRoles = new Set([
   "COMPRADOR",
 ]);
 
+const goalSectors = new Set([
+  "FINANCEIRO",
+  "DP",
+  "FISCAL_CONTABIL",
+  "LEGALIZACAO",
+  "CERTIFICADO_DIGITAL",
+  "ADMIN",
+  "GERAL",
+]);
+
+const goalMetricTypes = new Set(["FINANCEIRO", "DEMANDAS"]);
+
 type WorkspaceMember = {
   workspace_id: string;
   user_id: string;
@@ -1904,6 +1916,269 @@ app.get("/api/bpo/insights", async (request, reply) => {
     monthlyCompleted: monthlyRows,
     overdueByPriority,
   };
+});
+
+app.get("/api/dashboard/metas", async (request, reply) => {
+  const context = await requireWorkspaceContext(request, reply);
+  if (!context) return;
+  const { workspace } = context;
+
+  const rows = await sql`
+    select *
+    from sector_goals
+    where workspace_id = ${workspace.id}
+      and is_active = true
+    order by period_end desc, updated_at desc
+  `;
+
+  return rows;
+});
+
+app.get("/api/admin/metas", async (request, reply) => {
+  const context = await requireWorkspaceContext(request, reply, new Set(["ADMIN"]));
+  if (!context) return;
+  const { workspace } = context;
+
+  const query = request.query as {
+    search?: string;
+    sector?: string;
+    metricType?: string;
+  };
+
+  const search = query.search?.trim();
+  const sector = query.sector?.trim();
+  const metricType = query.metricType?.trim();
+
+  const filters: string[] = ["workspace_id = $1"];
+  const values: Array<string> = [workspace.id];
+
+  if (search) {
+    values.push(`%${search.toUpperCase()}%`);
+    filters.push(`(upper(sector) like $${values.length} or upper(metric_type) like $${values.length})`);
+  }
+  if (sector && sector !== "ALL") {
+    values.push(sector);
+    filters.push(`sector = $${values.length}`);
+  }
+  if (metricType && metricType !== "ALL") {
+    values.push(metricType);
+    filters.push(`metric_type = $${values.length}`);
+  }
+
+  const whereClause = `where ${filters.join(" and ")}`;
+
+  const rows = await sql.unsafe(
+    `select * from sector_goals ${whereClause} order by period_end desc, updated_at desc`,
+    values
+  );
+
+  return rows;
+});
+
+app.post("/api/admin/metas", async (request, reply) => {
+  const context = await requireWorkspaceContext(request, reply, new Set(["ADMIN"]));
+  if (!context) return;
+  const { workspace } = context;
+
+  const body = request.body as {
+    sector?: string;
+    metricType?: string;
+    targetValue?: number;
+    achievedValue?: number;
+    periodStart?: string;
+    periodEnd?: string;
+    isActive?: boolean;
+  };
+
+  const sector = body?.sector?.trim();
+  const metricType = body?.metricType?.trim();
+  const targetValue = Number(body?.targetValue ?? NaN);
+  const achievedValue = Number(body?.achievedValue ?? 0);
+  const periodStart = body?.periodStart?.trim();
+  const periodEnd = body?.periodEnd?.trim();
+
+  if (!sector || !goalSectors.has(sector)) {
+    reply.status(400).send({ message: "Setor inválido." });
+    return;
+  }
+  if (!metricType || !goalMetricTypes.has(metricType)) {
+    reply.status(400).send({ message: "Tipo de métrica inválido." });
+    return;
+  }
+  if (!Number.isFinite(targetValue) || targetValue <= 0) {
+    reply.status(400).send({ message: "Meta deve ser maior que zero." });
+    return;
+  }
+  if (!Number.isFinite(achievedValue) || achievedValue < 0) {
+    reply.status(400).send({ message: "Valor alcançado inválido." });
+    return;
+  }
+  if (!periodStart || !periodEnd) {
+    reply.status(400).send({ message: "Período é obrigatório." });
+    return;
+  }
+
+  const inserted = (await sql`
+    insert into sector_goals (
+      workspace_id,
+      sector,
+      metric_type,
+      target_value,
+      achieved_value,
+      period_start,
+      period_end,
+      is_active
+    )
+    values (
+      ${workspace.id},
+      ${sector},
+      ${metricType},
+      ${targetValue},
+      ${achievedValue},
+      ${periodStart},
+      ${periodEnd},
+      ${body?.isActive ?? true}
+    )
+    returning *
+  `)[0];
+
+  return inserted ?? null;
+});
+
+app.put("/api/admin/metas/:id", async (request, reply) => {
+  const context = await requireWorkspaceContext(request, reply, new Set(["ADMIN"]));
+  if (!context) return;
+  const { workspace } = context;
+
+  const { id } = request.params as { id?: string };
+  if (!id) {
+    reply.status(400).send({ message: "ID da meta obrigatório." });
+    return;
+  }
+
+  const body = request.body as {
+    sector?: string;
+    metricType?: string;
+    targetValue?: number;
+    achievedValue?: number;
+    periodStart?: string;
+    periodEnd?: string;
+    isActive?: boolean;
+  };
+
+  const sector = body?.sector?.trim();
+  const metricType = body?.metricType?.trim();
+  const targetValue = Number(body?.targetValue ?? NaN);
+  const achievedValue = Number(body?.achievedValue ?? 0);
+  const periodStart = body?.periodStart?.trim();
+  const periodEnd = body?.periodEnd?.trim();
+
+  if (!sector || !goalSectors.has(sector)) {
+    reply.status(400).send({ message: "Setor inválido." });
+    return;
+  }
+  if (!metricType || !goalMetricTypes.has(metricType)) {
+    reply.status(400).send({ message: "Tipo de métrica inválido." });
+    return;
+  }
+  if (!Number.isFinite(targetValue) || targetValue <= 0) {
+    reply.status(400).send({ message: "Meta deve ser maior que zero." });
+    return;
+  }
+  if (!Number.isFinite(achievedValue) || achievedValue < 0) {
+    reply.status(400).send({ message: "Valor alcançado inválido." });
+    return;
+  }
+  if (!periodStart || !periodEnd) {
+    reply.status(400).send({ message: "Período é obrigatório." });
+    return;
+  }
+
+  const updated = (await sql`
+    update sector_goals
+    set sector = ${sector},
+        metric_type = ${metricType},
+        target_value = ${targetValue},
+        achieved_value = ${achievedValue},
+        period_start = ${periodStart},
+        period_end = ${periodEnd},
+        is_active = ${typeof body.isActive === "boolean" ? body.isActive : sql`is_active`},
+        updated_at = ${new Date()}
+    where id = ${id}
+      and workspace_id = ${workspace.id}
+    returning *
+  `)[0];
+
+  if (!updated) {
+    reply.status(404).send({ message: "Meta não encontrada." });
+    return;
+  }
+
+  return updated;
+});
+
+app.post("/api/admin/metas/:id/toggle-active", async (request, reply) => {
+  const context = await requireWorkspaceContext(request, reply, new Set(["ADMIN"]));
+  if (!context) return;
+  const { workspace } = context;
+
+  const { id } = request.params as { id?: string };
+  if (!id) {
+    reply.status(400).send({ message: "ID da meta obrigatório." });
+    return;
+  }
+
+  const body = request.body as { isActive?: boolean };
+  const existing = (await sql`
+    select id, is_active
+    from sector_goals
+    where id = ${id}
+      and workspace_id = ${workspace.id}
+    limit 1
+  `)[0];
+
+  if (!existing) {
+    reply.status(404).send({ message: "Meta não encontrada." });
+    return;
+  }
+
+  const nextActive = typeof body?.isActive === "boolean" ? body.isActive : !existing.is_active;
+  const updated = (await sql`
+    update sector_goals
+    set is_active = ${nextActive},
+        updated_at = ${new Date()}
+    where id = ${id}
+      and workspace_id = ${workspace.id}
+    returning *
+  `)[0];
+
+  return updated ?? null;
+});
+
+app.delete("/api/admin/metas/:id", async (request, reply) => {
+  const context = await requireWorkspaceContext(request, reply, new Set(["ADMIN"]));
+  if (!context) return;
+  const { workspace } = context;
+
+  const { id } = request.params as { id?: string };
+  if (!id) {
+    reply.status(400).send({ message: "ID da meta obrigatório." });
+    return;
+  }
+
+  const deleted = (await sql`
+    delete from sector_goals
+    where id = ${id}
+      and workspace_id = ${workspace.id}
+    returning id
+  `)[0];
+
+  if (!deleted) {
+    reply.status(404).send({ message: "Meta não encontrada." });
+    return;
+  }
+
+  return { ok: true };
 });
 
 app.get("/api/admin/users", async (request, reply) => {

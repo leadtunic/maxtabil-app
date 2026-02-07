@@ -25,18 +25,13 @@ import {
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart";
-import { supabase } from "@/lib/supabase";
+import { apiRequest } from "@/lib/api";
 import {
   BarChart3,
   CalendarCheck,
-  CheckCircle2,
   Maximize2,
-  Minimize2,
-  Sparkles,
 } from "lucide-react";
-import type { Database } from "@/types/supabase";
-
-type SectorGoalRow = Database["public"]["Tables"]["sector_goals"]["Row"];
+import type { SectorGoal as ApiSectorGoal } from "@/types";
 
 type GoalUnit = "currency" | "percent" | "count";
 
@@ -92,20 +87,22 @@ const prioritySplit = [
 
 const sectorLabels: Record<string, string> = {
   financeiro: "Financeiro",
-  bpo: "BPO Financeiro",
   dp: "Departamento Pessoal",
   fiscal_contabil: "Fiscal/Contábil",
   legalizacao: "Legalização",
   certificado_digital: "Certificado Digital",
+  admin: "Administração",
+  geral: "Geral",
 };
 
 const sectorOrder = [
   "financeiro",
-  "bpo",
   "dp",
   "fiscal_contabil",
   "legalizacao",
   "certificado_digital",
+  "admin",
+  "geral",
 ];
 
 const defaultGoals: SectorGoal[] = [
@@ -118,28 +115,20 @@ const defaultGoals: SectorGoal[] = [
     unit: "currency",
   },
   {
-    sectorKey: "bpo",
-    label: sectorLabels.bpo,
-    goalLabel: "SLA de entregas",
-    targetValue: 95,
-    currentValue: 87,
-    unit: "percent",
-  },
-  {
     sectorKey: "dp",
     label: sectorLabels.dp,
-    goalLabel: "Prazos de folha",
-    targetValue: 100,
+    goalLabel: "Demandas concluídas",
+    targetValue: 120,
     currentValue: 92,
-    unit: "percent",
+    unit: "count",
   },
   {
     sectorKey: "fiscal_contabil",
     label: sectorLabels.fiscal_contabil,
-    goalLabel: "Compliance DAS",
-    targetValue: 98,
+    goalLabel: "Demandas fiscais",
+    targetValue: 100,
     currentValue: 90,
-    unit: "percent",
+    unit: "count",
   },
   {
     sectorKey: "legalizacao",
@@ -155,7 +144,23 @@ const defaultGoals: SectorGoal[] = [
     goalLabel: "Renovações concluídas",
     targetValue: 80,
     currentValue: 64,
-    unit: "percent",
+    unit: "count",
+  },
+  {
+    sectorKey: "admin",
+    label: sectorLabels.admin,
+    goalLabel: "Entregas administrativas",
+    targetValue: 60,
+    currentValue: 44,
+    unit: "count",
+  },
+  {
+    sectorKey: "geral",
+    label: sectorLabels.geral,
+    goalLabel: "Meta geral",
+    targetValue: 300,
+    currentValue: 210,
+    unit: "count",
   },
 ];
 
@@ -182,20 +187,7 @@ const formatGoalProgress = (current: number, target: number) => {
 function useSectorGoals() {
   return useQuery({
     queryKey: ["sector-goals"],
-    queryFn: async () => {
-      if (!supabase) return [] as SectorGoalRow[];
-      const { data, error } = await supabase
-        .from("sector_goals")
-        .select("*")
-        .eq("is_active", true)
-        .order("period_end", { ascending: false });
-
-      if (error) {
-        throw error;
-      }
-
-      return data || [];
-    },
+    queryFn: async () => apiRequest<ApiSectorGoal[]>("/api/dashboard/metas"),
     staleTime: 1000 * 60 * 5,
   });
 }
@@ -209,22 +201,34 @@ export default function Dashboard() {
     const fallbackMap = new Map<string, SectorGoal>();
     defaultGoals.forEach((goal) => fallbackMap.set(goal.sectorKey, goal));
 
-    const latestBySector = new Map<string, SectorGoalRow>();
+    const latestBySector = new Map<string, ApiSectorGoal>();
     sectorGoalsData.forEach((row) => {
-      if (!latestBySector.has(row.sector_key)) {
-        latestBySector.set(row.sector_key, row);
+      const existing = latestBySector.get(row.sector);
+      if (!existing) {
+        latestBySector.set(row.sector, row);
+        return;
+      }
+
+      const existingPeriod = existing.period_end ? new Date(existing.period_end).getTime() : 0;
+      const rowPeriod = row.period_end ? new Date(row.period_end).getTime() : 0;
+      const existingUpdated = existing.updated_at ? new Date(existing.updated_at).getTime() : 0;
+      const rowUpdated = row.updated_at ? new Date(row.updated_at).getTime() : 0;
+
+      if (rowPeriod > existingPeriod || (rowPeriod === existingPeriod && rowUpdated > existingUpdated)) {
+        latestBySector.set(row.sector, row);
       }
     });
 
     latestBySector.forEach((row) => {
-      const unit = (row.unit || "count") as GoalUnit;
-      const targetValue = row.target_value ?? 0;
-      const currentValue = row.current_value ?? 0;
-      const goalLabel = row.goal_label || "Meta do setor";
-      const label = sectorLabels[row.sector_key] || row.sector_key;
+      const unit = row.metric_type === "FINANCEIRO" ? "currency" : "count";
+      const targetValue = Number(row.target_value ?? 0);
+      const currentValue = Number(row.achieved_value ?? 0);
+      const goalLabel = row.metric_type === "FINANCEIRO" ? "Meta financeira" : "Meta de demandas";
+      const sectorKey = row.sector.toLowerCase();
+      const label = sectorLabels[sectorKey] || row.sector;
 
-      fallbackMap.set(row.sector_key, {
-        sectorKey: row.sector_key,
+      fallbackMap.set(sectorKey, {
+        sectorKey,
         label,
         goalLabel,
         targetValue,
@@ -259,7 +263,10 @@ export default function Dashboard() {
     ? goalsBySector.reduce((acc, goal) => acc + goal.progress, 0) / goalsBySector.length
     : 0;
   const demandProgress = plannedTotal ? (completedTotal / plannedTotal) * 100 : 0;
-  const overallProgress = Math.round(demandProgress * 0.6 + goalProgressAvg * 0.4);
+  const generalGoal = goalsBySector.find((goal) => goal.sectorKey === "geral");
+  const overallProgress = generalGoal
+    ? generalGoal.progress
+    : Math.round(demandProgress * 0.6 + goalProgressAvg * 0.4);
 
   const handleOpenFullscreen = (id: string) => {
     setFullscreenId(id);
@@ -291,6 +298,18 @@ export default function Dashboard() {
     document.addEventListener("fullscreenchange", handleFullscreenChange);
     return () => {
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleEsc = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        handleExitFullscreen();
+      }
+    };
+    document.addEventListener("keydown", handleEsc);
+    return () => {
+      document.removeEventListener("keydown", handleEsc);
     };
   }, []);
 
@@ -598,7 +617,11 @@ export default function Dashboard() {
         <Card className="border-border/60">
           <CardHeader className="space-y-1">
             <CardTitle className="text-base font-medium">Meta geral cumprida</CardTitle>
-            <CardDescription>operações e financeiro</CardDescription>
+            <CardDescription>
+              {generalGoal
+                ? "Setor GERAL (Administração > Metas)"
+                : "Fallback: operações + média das metas setoriais"}
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="text-3xl font-semibold">{overallProgress}%</div>
@@ -611,7 +634,9 @@ export default function Dashboard() {
         <CardHeader className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
           <div>
             <CardTitle>Metas por setor</CardTitle>
-            <CardDescription>Fluxo diário de metas operacionais e financeiras.</CardDescription>
+            <CardDescription>
+              Fonte: Administração &gt; Metas (somente metas ativas do banco).
+            </CardDescription>
           </div>
           <Badge variant="outline" className="border-border/60">
             {goalsBySector.length} setores ativos
@@ -761,7 +786,11 @@ export default function Dashboard() {
           <CardHeader className="flex items-start justify-between">
             <div>
               <CardTitle>Meta geral</CardTitle>
-              <CardDescription>Saúde do conjunto de setores.</CardDescription>
+              <CardDescription>
+                {generalGoal
+                  ? "Baseada na meta ativa do setor GERAL."
+                  : "Sem meta GERAL ativa: cálculo por composição."}
+              </CardDescription>
             </div>
             <Button size="icon" variant="ghost" onClick={() => handleOpenFullscreen("overall")}
 >
@@ -864,6 +893,7 @@ export default function Dashboard() {
         <div
           ref={fullscreenRef}
           className="fixed inset-0 z-50 flex items-center justify-center bg-[#0B1324] text-white"
+          onClick={handleExitFullscreen}
         >
           <style>{`
             @keyframes confetti-fall {
@@ -878,9 +908,12 @@ export default function Dashboard() {
           `}</style>
 
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,#1c2b4a_0%,#0B1324_55%,#05070f_100%)]" />
-          <div className="absolute top-8 left-8 flex items-center gap-2 text-white/80">
-            <Sparkles className="h-5 w-5 text-blue-300" />
-            <span className="text-sm font-semibold tracking-wide">ESCOFER</span>
+          <div className="absolute top-8 left-1/2 -translate-x-1/2 z-20">
+            <img
+              src="/logo.png"
+              alt="Logo ESCOFER"
+              className="h-10 w-auto object-contain opacity-95"
+            />
           </div>
 
           {isCelebration && (
@@ -923,23 +956,12 @@ export default function Dashboard() {
           )}
 
           <div className="relative z-10 flex w-full max-w-5xl flex-col items-center gap-6 px-6">
-            <div className="flex items-center gap-3">
-              {isCelebration ? (
-                <CheckCircle2 className="h-6 w-6 text-emerald-300" />
-              ) : (
-                <BarChart3 className="h-6 w-6 text-blue-300" />
-              )}
-              <h2 className="text-xl font-semibold">
-                {isCelebration ? "Meta atingida" : "Modo fullscreen"}
-              </h2>
-            </div>
-            <div className="w-full rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.35)]">
+            <div
+              className="w-full rounded-3xl border border-white/10 bg-white/5 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.35)]"
+              onClick={(event) => event.stopPropagation()}
+            >
               {renderFullscreenContent()}
             </div>
-            <Button variant="secondary" onClick={handleExitFullscreen}>
-              <Minimize2 className="mr-2 h-4 w-4" />
-              Sair do fullscreen
-            </Button>
           </div>
         </div>
       )}

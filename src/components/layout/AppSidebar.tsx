@@ -11,6 +11,7 @@ import {
   Shield,
   BarChart3,
   ChevronDown,
+  Target,
 } from "lucide-react";
 import {
   Sidebar,
@@ -93,6 +94,7 @@ const moduleSections = [
     items: [
       { title: "Usuários", url: "/app/admin/usuarios", icon: Users },
       { title: "Links", url: "/app/admin/links", icon: Link2 },
+      { title: "Metas", url: "/app/admin/metas", icon: Target },
       { title: "Regras", url: "/app/admin/regras", icon: Settings },
       { title: "Auditoria", url: "/app/admin/auditoria", icon: ClipboardList },
     ],

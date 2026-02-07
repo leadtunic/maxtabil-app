@@ -168,3 +168,29 @@ export interface DigitalCert {
   created_at: string;
   updated_at: string;
 }
+
+// Sector Goals
+export type GoalSector =
+  | "FINANCEIRO"
+  | "DP"
+  | "FISCAL_CONTABIL"
+  | "LEGALIZACAO"
+  | "CERTIFICADO_DIGITAL"
+  | "ADMIN"
+  | "GERAL";
+
+export type GoalMetricType = "FINANCEIRO" | "DEMANDAS";
+
+export interface SectorGoal {
+  id: string;
+  workspace_id: string;
+  sector: GoalSector;
+  metric_type: GoalMetricType;
+  target_value: number;
+  achieved_value: number;
+  period_start: string;
+  period_end: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}

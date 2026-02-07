@@ -37,6 +37,7 @@ import AdminUsuarios from "./pages/app/admin/AdminUsuarios";
 import AdminLinks from "./pages/app/admin/AdminLinks";
 import AdminRegras from "./pages/app/admin/AdminRegras";
 import AdminAuditoria from "./pages/app/admin/AdminAuditoria";
+import AdminMetas from "./pages/app/admin/AdminMetas";
 import Configuracoes from "./pages/app/Configuracoes";
 
 const queryClient = new QueryClient();
@@ -101,6 +102,7 @@ const App = () => (
               {/* Admin */}
               <Route path="admin/usuarios" element={<AdminUsuarios />} />
               <Route path="admin/links" element={<AdminLinks />} />
+              <Route path="admin/metas" element={<AdminMetas />} />
               <Route path="admin/regras" element={<AdminRegras />} />
               <Route path="admin/auditoria" element={<AdminAuditoria />} />
               
