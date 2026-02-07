@@ -2421,6 +2421,7 @@ app.put("/api/workspace/settings", async (request, reply) => {
     hasBranding && body.branding && typeof body.branding === "object"
       ? body.branding
       : (currentSettings as { branding?: Record<string, unknown> }).branding ?? {};
+  const brandingJson = JSON.stringify(branding);
 
   const settings = (await sql`
     insert into workspace_settings (
@@ -2432,9 +2433,9 @@ app.put("/api/workspace/settings", async (request, reply) => {
     )
     values (
       ${workspace.id},
-      ${enabledModulesJson},
+      ${enabledModulesJson}::jsonb,
       ${completedOnboarding},
-      ${sql.json(asJsonValue(branding))},
+      ${brandingJson}::jsonb,
       ${updatedAt}
     )
     on conflict (workspace_id) do update set
