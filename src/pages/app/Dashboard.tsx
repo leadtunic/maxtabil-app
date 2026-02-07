@@ -105,65 +105,6 @@ const sectorOrder = [
   "geral",
 ];
 
-const defaultGoals: SectorGoal[] = [
-  {
-    sectorKey: "financeiro",
-    label: sectorLabels.financeiro,
-    goalLabel: "Receita sob gestão",
-    targetValue: 320000,
-    currentValue: 248000,
-    unit: "currency",
-  },
-  {
-    sectorKey: "dp",
-    label: sectorLabels.dp,
-    goalLabel: "Demandas concluídas",
-    targetValue: 120,
-    currentValue: 92,
-    unit: "count",
-  },
-  {
-    sectorKey: "fiscal_contabil",
-    label: sectorLabels.fiscal_contabil,
-    goalLabel: "Demandas fiscais",
-    targetValue: 100,
-    currentValue: 90,
-    unit: "count",
-  },
-  {
-    sectorKey: "legalizacao",
-    label: sectorLabels.legalizacao,
-    goalLabel: "Processos ativos",
-    targetValue: 52,
-    currentValue: 36,
-    unit: "count",
-  },
-  {
-    sectorKey: "certificado_digital",
-    label: sectorLabels.certificado_digital,
-    goalLabel: "Renovações concluídas",
-    targetValue: 80,
-    currentValue: 64,
-    unit: "count",
-  },
-  {
-    sectorKey: "admin",
-    label: sectorLabels.admin,
-    goalLabel: "Entregas administrativas",
-    targetValue: 60,
-    currentValue: 44,
-    unit: "count",
-  },
-  {
-    sectorKey: "geral",
-    label: sectorLabels.geral,
-    goalLabel: "Meta geral",
-    targetValue: 300,
-    currentValue: 210,
-    unit: "count",
-  },
-];
-
 const priorityColors = ["#60A5FA", "#FBBF24", "#F87171"];
 
 const formatCurrency = (value: number) =>
@@ -198,9 +139,6 @@ export default function Dashboard() {
   const { data: sectorGoalsData = [] } = useSectorGoals();
 
   const goalsBySector = useMemo<ChartGoal[]>(() => {
-    const fallbackMap = new Map<string, SectorGoal>();
-    defaultGoals.forEach((goal) => fallbackMap.set(goal.sectorKey, goal));
-
     const latestBySector = new Map<string, ApiSectorGoal>();
     sectorGoalsData.forEach((row) => {
       const existing = latestBySector.get(row.sector);
@@ -219,6 +157,7 @@ export default function Dashboard() {
       }
     });
 
+    const mapped = new Map<string, SectorGoal>();
     latestBySector.forEach((row) => {
       const unit = row.metric_type === "FINANCEIRO" ? "currency" : "count";
       const targetValue = Number(row.target_value ?? 0);
@@ -227,7 +166,7 @@ export default function Dashboard() {
       const sectorKey = row.sector.toLowerCase();
       const label = sectorLabels[sectorKey] || row.sector;
 
-      fallbackMap.set(sectorKey, {
+      mapped.set(sectorKey, {
         sectorKey,
         label,
         goalLabel,
@@ -239,7 +178,7 @@ export default function Dashboard() {
     });
 
     return sectorOrder
-      .map((key) => fallbackMap.get(key))
+      .map((key) => mapped.get(key))
       .filter(Boolean)
       .map((goal) => ({
         ...goal!,
@@ -264,9 +203,7 @@ export default function Dashboard() {
     : 0;
   const demandProgress = plannedTotal ? (completedTotal / plannedTotal) * 100 : 0;
   const generalGoal = goalsBySector.find((goal) => goal.sectorKey === "geral");
-  const overallProgress = generalGoal
-    ? generalGoal.progress
-    : Math.round(demandProgress * 0.6 + goalProgressAvg * 0.4);
+  const overallProgress = generalGoal ? generalGoal.progress : goalsBySector.length ? Math.round(demandProgress * 0.6 + goalProgressAvg * 0.4) : 0;
 
   const handleOpenFullscreen = (id: string) => {
     setFullscreenId(id);
@@ -643,48 +580,54 @@ export default function Dashboard() {
           </Badge>
         </CardHeader>
         <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {goalsBySector.map((goal) => (
-            <div
-              key={goal.sectorKey}
-              className="rounded-2xl border border-border/60 bg-card/80 p-5 shadow-sm"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="text-xs text-muted-foreground">{goal.goalLabel}</p>
-                  <p className="text-lg font-semibold">
-                    {formatGoalValue(goal.currentValue, goal.unit)}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Meta: {formatGoalValue(goal.targetValue, goal.unit)}
-                  </p>
-                </div>
-                <Badge variant="outline" className="border-border/60">
-                  {goal.label}
-                </Badge>
-              </div>
-              <div className="mt-4 space-y-2">
-                <Progress value={goal.progress} />
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>Progresso do setor</span>
-                  <span>{goal.progress}%</span>
-                </div>
-              </div>
-              <div className="mt-4 flex items-center justify-between">
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <CalendarCheck className="h-4 w-4" />
-                  Último ciclo
-                </div>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => handleOpenFullscreen(`meta-${goal.sectorKey}`)}
-                >
-                  <Maximize2 className="mr-2 h-4 w-4" />
-                  Maximizar
-                </Button>
-              </div>
+          {goalsBySector.length === 0 ? (
+            <div className="col-span-full rounded-xl border border-dashed border-border/60 p-8 text-center text-muted-foreground">
+              Nenhuma meta ativa configurada. Cadastre em Administração &gt; Metas.
             </div>
-          ))}
+          ) : (
+            goalsBySector.map((goal) => (
+              <div
+                key={goal.sectorKey}
+                className="rounded-2xl border border-border/60 bg-card/80 p-5 shadow-sm"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-xs text-muted-foreground">{goal.goalLabel}</p>
+                    <p className="text-lg font-semibold">
+                      {formatGoalValue(goal.currentValue, goal.unit)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Meta: {formatGoalValue(goal.targetValue, goal.unit)}
+                    </p>
+                  </div>
+                  <Badge variant="outline" className="border-border/60">
+                    {goal.label}
+                  </Badge>
+                </div>
+                <div className="mt-4 space-y-2">
+                  <Progress value={goal.progress} />
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>Progresso do setor</span>
+                    <span>{goal.progress}%</span>
+                  </div>
+                </div>
+                <div className="mt-4 flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <CalendarCheck className="h-4 w-4" />
+                    Último ciclo
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => handleOpenFullscreen(`meta-${goal.sectorKey}`)}
+                  >
+                    <Maximize2 className="mr-2 h-4 w-4" />
+                    Maximizar
+                  </Button>
+                </div>
+              </div>
+            ))
+          )}
         </CardContent>
       </Card>
 
