@@ -192,6 +192,50 @@ export interface Database {
           created_at?: string;
         };
       };
+      sector_goals: {
+        Row: {
+          id: string;
+          workspace_id: string;
+          sector_key: string;
+          goal_label: string | null;
+          target_value: number | null;
+          current_value: number | null;
+          unit: string | null;
+          period_start: string | null;
+          period_end: string | null;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          workspace_id: string;
+          sector_key: string;
+          goal_label?: string | null;
+          target_value?: number | null;
+          current_value?: number | null;
+          unit?: string | null;
+          period_start?: string | null;
+          period_end?: string | null;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          workspace_id?: string;
+          sector_key?: string;
+          goal_label?: string | null;
+          target_value?: number | null;
+          current_value?: number | null;
+          unit?: string | null;
+          period_start?: string | null;
+          period_end?: string | null;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
       rulesets: {
         Row: {
           id: string;

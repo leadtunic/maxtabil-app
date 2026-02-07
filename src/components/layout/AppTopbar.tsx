@@ -37,25 +37,26 @@ export function AppTopbar() {
     .join("")
     .toUpperCase();
 
+  const formattedDate = new Date().toLocaleDateString("pt-BR", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+
   return (
-    <header className="h-14 border-b border-border bg-background px-4 flex items-center justify-between sticky top-0 z-10">
+    <header className="sticky top-0 z-10 h-16 border-b border-border/60 bg-background/70 backdrop-blur-xl px-6 flex items-center justify-between">
       <div className="flex items-center gap-4">
         <SidebarTrigger className="text-muted-foreground hover:text-foreground transition-micro" />
         <div className="hidden md:block">
-          <p className="text-sm text-muted-foreground">
-            {new Date().toLocaleDateString("pt-BR", {
-              weekday: "long",
-              day: "numeric",
-              month: "short",
-            })}
-          </p>
+          <p className="text-sm text-muted-foreground capitalize">{formattedDate}</p>
         </div>
       </div>
 
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="icon" className="relative">
           <Bell className="w-4 h-4 text-muted-foreground" />
-          <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-primary rounded-full" />
+          <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-primary animate-pulse" />
         </Button>
 
         <DropdownMenu>

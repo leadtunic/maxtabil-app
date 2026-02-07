@@ -7,8 +7,7 @@ export type RouteKey =
   | "fiscal-contabil"
   | "legalizacao"
   | "certificado-digital"
-  | "admin"
-  | "crm";
+  | "admin";
 
 const roleAccess: Record<RoleKey, RouteKey[]> = {
   ADMIN: [
@@ -19,7 +18,6 @@ const roleAccess: Record<RoleKey, RouteKey[]> = {
     "legalizacao",
     "certificado-digital",
     "admin",
-    "crm",
   ],
   FINANCEIRO: ["home", "financeiro"],
   DP: ["home", "dp"],
@@ -44,7 +42,6 @@ const routeMatchers: Array<{ key: RouteKey; test: (pathname: string) => boolean 
   { key: "legalizacao", test: (path) => path.startsWith("/app/legalizacao") },
   { key: "certificado-digital", test: (path) => path.startsWith("/app/certificado-digital") },
   { key: "admin", test: (path) => path.startsWith("/app/admin") },
-  { key: "crm", test: (path) => path.startsWith("/app/crm") },
   { key: "home", test: (path) => path === "/app" || path === "/app/" },
 ];
 
